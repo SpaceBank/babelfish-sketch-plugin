@@ -28,81 +28,146 @@ class StateMachine {
     this.isFirstTimeUsernameInput = settings.sessionVariable("is-first-time-username-input") != "true";
     this.isFirstTimePasswordInput = settings.sessionVariable("is-first-time-password-input") != "true";
 
-    this.webServiceEndpoint       = undefined;
-    this.webServiceUsername       = undefined;
-    this.webServicePassword       = undefined;
-    this.webServiceToken          = undefined;
-    this.jsonQueue                = [];
-    this.totalSize                = 0;
-    this.totalCreateCounter       = 0;
-    this.totalUpdateCounter       = 0;
-    this.totalDeleteCounter       = 0;
+    this.webServiceEndpoint = undefined;
+    this.webServiceUsername = undefined;
+    this.webServicePassword = undefined;
+    this.webServiceToken    = undefined;
 
-    this.prevCallItem             = null;
-    this.prevWebServiceEndpoint   = undefined;
-    this.prevWebServiceUsername   = undefined;
-    this.prevWebServicePassword   = undefined;
-    this.prevWebServiceToken      = undefined;
-    this.prevJsonQueueLength      = 0;
-    this.prevTotalSize            = 0;
-    this.prevTotalCreateCounter   = 0;
-    this.prevTotalUpdateCounter   = 0;
-    this.prevTotalDeleteCounter   = 0;
+    this.layerCounter              = 0;
+    this.layerFilterQueue          = [];
+    this.layerUploadQueue          = [];
+    this.imageCounter              = 0;
+    this.imageFilterQueue          = [];
+    this.imageUploadQueue          = [];
+    this.cumulativeImageUpload     = [];
+    this.cumulativeImageUploadSize = 1024 * 1024 * 1024;
+    this.imageStats                = {};
+
+    this.totalSize          = 0;
+    this.totalCreateCounter = 0;
+    this.totalUpdateCounter = 0;
+    this.totalDeleteCounter = 0;
+
+    this.prevCallItem           = null;
+    this.prevWebServiceEndpoint = undefined;
+    this.prevWebServiceUsername = undefined;
+    this.prevWebServicePassword = undefined;
+    this.prevWebServiceToken    = undefined;
+
+    this.prevLayerCounter           = 0;
+    this.prevLayerFilterQueueLength = 0;
+    this.prevLayerUploadQueueLength = 0;
+    this.prevImageCounter           = 0;
+    this.prevImageFilterQueueLength = 0;
+    this.prevImageUploadQueueLength = 0;
+
+    this.prevTotalSize          = 0;
+    this.prevTotalCreateCounter = 0;
+    this.prevTotalUpdateCounter = 0;
+    this.prevTotalDeleteCounter = 0;
+
+    this.timeFrom = Date.now()
 
     settings.setSessionVariable("is-first-time-endpoint-input", "true");
     settings.setSessionVariable("is-first-time-username-input", "true");
     settings.setSessionVariable("is-first-time-password-input", "true");
   }
 
+  formatSize(byteNumber) {
+    if (byteNumber < 1024) {
+      return byteNumber + " bytes";
+    } else if (byteNumber < 1024 * 1024) {
+      return Math.round(byteNumber / 1024.0) + " Kb";
+    } else if (byteNumber < 1024 * 1024 * 1024) {
+      return Math.round(byteNumber / (1024.0 * 1024.0)) + " Mb";
+    } else {
+      return Math.round(byteNumber / (1024.0 * 1024.0 * 1024.0)) + " Gb";
+    }
+  }
+
+  formatError(error) {
+    if (typeof error.localizedDescription === "function") {
+      return error.localizedDescription();
+    } else {
+      return String(errror);
+    }
+  }
+
   callNextItem() {
     var self = this;
 
     if (self.prevCallItem != null) {
-      console.log(self.prevCallItem.name);
-
       if (self.prevWebServiceEndpoint != self.webServiceEndpoint) {
-        console.log("    Endpoint became \"" + self.webServiceEndpoint + "\"; was \"" + self.prevWebServiceEndpoint + "\".");
+        console.log("    Endpoint = \"" + self.webServiceEndpoint + "\"; // was \"" + self.prevWebServiceEndpoint + "\".");
         self.prevWebServiceEndpoint = self.webServiceEndpoint;
       }
 
       if (self.prevWebServiceUsername != self.webServiceUsername) {
-        console.log("    Username became \"" + self.webServiceUsername + "\"; was \"" + self.prevWebServiceUsername + "\".");
+        console.log("    Username = \"" + self.webServiceUsername + "\"; // was \"" + self.prevWebServiceUsername + "\".");
         self.prevWebServiceUsername = self.webServiceUsername;
       }
 
       if (self.prevWebServicePassword != self.webServicePassword) {
-        console.log("    Password became \"" + self.webServicePassword + "\"; was \"" + self.prevWebServicePassword + "\".");
+        console.log("    Password = \"" + self.webServicePassword + "\"; // was \"" + self.prevWebServicePassword + "\".");
         self.prevWebServicePassword = self.webServicePassword;
       }
 
       if (self.prevWebServiceToken != self.webServiceToken) {
-        console.log("    Token became \"" + self.webServiceToken + "\"; was \"" + self.prevWebServiceToken + "\".");
+        console.log("    Token = \"" + self.webServiceToken + "\"; // was \"" + self.prevWebServiceToken + "\".");
         self.prevWebServiceToken = self.webServiceToken;
       }
 
-      if (self.prevJsonQueueLength != self.jsonQueue.length) {
-        console.log("    JsonQueueLength became " + self.jsonQueue.length + "; was " + self.prevJsonQueueLength + ".");
-        self.prevJsonQueueLength = self.jsonQueue.length;
+      if (self.prevLayerCounter < self.layerCounter) {
+        if (self.layerCounter % 10 == 0) {
+          ui.message(self.layerCounter + " layers found.");
+        }
+
+        self.prevLayerCounter = self.layerCounter;
+      }
+
+      if (self.prevImageCounter < self.imageCounter) {
+        if (self.imageCounter % 10 == 0) {
+          ui.message(self.imageCounter + " images found.");
+        }
+
+        self.prevImageCounter = self.imageCounter;
+      }
+
+      if (self.prevLayerUploadQueueLength != self.layerUploadQueue.length) {
+        console.log("    LayerUploadQueueLength = " + self.layerUploadQueue.length + "; // was " + self.prevLayerUploadQueueLength + ".");
+        self.prevLayerUploadQueueLength = self.layerUploadQueue.length;
+      }
+
+      if (self.prevImageUploadQueueLength != self.imageUploadQueue.length) {
+        console.log("    ImageUploadQueueLength = " + self.imageUploadQueue.length + "; // was " + self.prevImageUploadQueueLength + ".");
+        self.prevImageUploadQueueLength = self.imageUploadQueue.length;
       }
 
       if (self.prevTotalSize != self.totalSize) {
-        console.log("    TotalSize became " + self.totalSize + "; was " + self.prevTotalSize + ".");
+        console.log("    TotalSize = " + self.totalSize + "; // was " + self.prevTotalSize + ".");
+
+        ui.message(this.formatSize(self.totalSize - self.prevTotalSize) + " chunk uploaded (" + this.formatSize(self.totalSize) + " total).");
+
         self.prevTotalSize = self.totalSize;
       }
 
       if (self.prevTotalCreateCounter != self.totalCreateCounter) {
-        console.log("    TotalCreateCounter became " + self.totalCreateCounter + "; was " + self.prevTotalCreateCounter + ".");
+        console.log("    TotalCreateCounter = " + self.totalCreateCounter + "; // was " + self.prevTotalCreateCounter + ".");
         self.prevTotalCreateCounter = self.totalCreateCounter;
       }
 
       if (self.prevTotalUpdateCounter != self.totalUpdateCounter) {
-        console.log("    TotalUpdateCounter became " + self.totalUpdateCounter + "; was " + self.prevTotalUpdateCounter + ".");
+        console.log("    TotalUpdateCounter = " + self.totalUpdateCounter + "; // was " + self.prevTotalUpdateCounter + ".");
         self.prevTotalUpdateCounter = self.totalUpdateCounter;
       }
 
       if (self.prevTotalDeleteCounter != self.totalDeleteCounter) {
-        console.log("    TotalDeleteCounter became " + self.totalDeleteCounter + "; was " + self.prevTotalDeleteCounter + ".");
+        console.log("    TotalDeleteCounter = " + self.totalDeleteCounter + "; // was " + self.prevTotalDeleteCounter + ".");
         self.prevTotalDeleteCounter = self.totalDeleteCounter;
+      }
+
+      if ((self.prevCallItem.name != 'stepEnumerateLayers') && (self.prevCallItem.name != 'stepEnumerateImages')) {
+        console.log('} // ' + self.prevCallItem.name + "; " + new Date(Date.now()).toISOString());
       }
     }
 
@@ -117,7 +182,11 @@ class StateMachine {
 
       self.prevCallItem = item;
 
-      setTimeout(item.bind(self), 0);
+      setTimeout(item.bind(self), 1);
+
+      if ((self.prevCallItem.name != 'stepEnumerateLayers') && (self.prevCallItem.name != 'stepEnumerateImages')) {
+        console.log(self.prevCallItem.name + " { // " + new Date(Date.now()).toISOString());
+      }
     }
   }
 
@@ -173,7 +242,7 @@ class StateMachine {
       self.isFirstTimePasswordInput = false;
       self.callStack.splice(0, 0, self.stepInputPassword);
     } else {
-      self.callStack.splice(0, 0, self.stepEnumerateDocument);
+      self.callStack.splice(0, 0, self.stepEnumerateDocumentLayers);
     }
 
     setTimeout(self.callNextItem.bind(self), 0);
@@ -271,189 +340,95 @@ class StateMachine {
     setTimeout(self.callNextItem.bind(self), 0);
   }
 
-  utilEnumerateArtboardLayers(layer, layerIndex, layerLevel) {
-    if (
-      //(layer.type != "Page") &&
-      (layer.type != "Artboard") &&
-      (layer.type != "SymbolMaster") &&
-      (layer.type != "SymbolInstance") &&
-      (layer.type != "Group") &&
-      //(layer.type != "Image") &&
-      (layer.type != "Text") &&
-      (layer.type != "Shape") &&
-      (layer.type != "ShapePath") &&
-      true) {
-      return false;
-    }
-
+  stepEnumerateLayers() {
     var self = this;
-    var masterUuid = null;
-    var targetUuid = null;
-    var rect = null;
-    var pngImage = null;
-    var svgImage = null;
-    var childLayers = [];
-    var overrides = [];
+    var item = self.layerFilterQueue.pop();
+    var layer = item[0];
+    var parentLayers = item[1];
 
-    if (layer.type == "SymbolInstance") {
-      masterUuid = assignmentBugWorkaround(layer.master.id);
-    }
+    if (
+      (layer.type == "Page") ||
+      (layer.type == "Artboard") ||
+      (layer.type == "SymbolMaster") ||
+      (layer.type == "SymbolInstance") ||
+      (layer.type == "Group") ||
+      (layer.type == "Image") ||
+      (layer.type == "Text") ||
+      (layer.type == "Shape") ||
+      // (layer.type == "ShapePath") ||
+      false) {
+      self.objectCounter++;
 
-    if (layer.flow !== undefined) {
-      targetUuid = assignmentBugWorkaround(layer.flow.targetId);
-    }
+      var rect = null;
+      var childLayers = [];
 
-    if (layer.frame !== undefined) {
-      rect = { "x": layer.frame.x, "y": layer.frame.y, "w": layer.frame.width, "h": layer.frame.height };
-    }
+      if (layer.frame !== undefined) {
+        rect = { "x": layer.frame.x, "y": layer.frame.y, "w": layer.frame.width, "h": layer.frame.height };
+      }
 
-    if ((layer.type == "Artboard") || (layer.type == "SymbolInstance") || (layer.type == "Text")) {
-      const pngOptions = { formats: "png", output: false };
-      const pngBuffer = sketch.export(layer, pngOptions);
-
-      pngImage = base64.encodeBin(pngBuffer);
-
-      const svgOptions = { formats: "svg", output: false };
-      const svgBuffer = sketch.export(layer, svgOptions);
-
-      svgImage = base64.encodeBin(svgBuffer);
-    }
-
-    if (layer.layers !== undefined) {
-      layer.layers.forEach(
-        function(l, i) {
-          var childLayer = self.utilEnumerateArtboardLayers(l, i, layerLevel + 1);
-
-          if (childLayer) {
-            childLayers.push(childLayer);
+      if (layer.layers !== undefined) {
+        layer.layers.forEach(
+          function(l, i) {
+            self.layerFilterQueue.push([l, childLayers]);
           }
-        }
-      );
-    }
+        );
+      }
 
-    if (layer.type == "SymbolInstance") {
-      layer.overrides.forEach(function(o, i) {
-        if (o.property == "stringValue") {
-          overrides.push({
-            "path": o.path,
-            "value": o.value
-          });
-        }
+      var overrides = [];
+
+      if (layer.type == "SymbolInstance") {
+        layer.overrides.forEach(function(o, i) {
+          if (o.property == "stringValue") {
+            overrides.push({
+              "path": o.path,
+              "value": o.value
+            });
+          }
+        });
+      }
+
+      var uuid = assignmentBugWorkaround(layer.id); 
+
+      parentLayers.push({
+        "uuid": uuid,
+        "type": layer.type,
+        "name": layer.name,
+        "master_uuid": null,
+        "target_uuid": null,
+        "rect": rect,
+        "png_image": null,
+        "svg_image": null,
+        "layers": childLayers,
+        "overrides": overrides
       });
     }
 
-    return {
-      "uuid": assignmentBugWorkaround(layer.id),
-      "type": layer.type,
-      "name": layer.name,
-      "master_uuid": masterUuid,
-      "target_uuid": targetUuid,
-      "rect": rect,
-      "png_image": pngImage,
-      "svg_image": svgImage,
-      "layers": childLayers,
-      "overrides": overrides
-    };
+    if (self.layerFilterQueue.length > 0) {
+      self.callStack.splice(0, 0, self.stepEnumerateLayers);
+      setTimeout(self.callNextItem.bind(self), 0);
+    } else if (self.layerUploadQueue.length > 0) {
+      self.callStack.splice(0, 0, self.stepGetLayerCsrfToken);
+      setTimeout(self.callNextItem.bind(self), 0);
+    } else {
+      self.callStack.splice(0, 0, self.stepReportSuccess);
+      setTimeout(self.callNextItem.bind(self), 0);
+    }
   }
 
-  utilEnumerateDocumentLayersUpToArtboard(layer, layerIndex, layerLevel) {
-    if (
-      (layer.type != "Page") &&
-      (layer.type != "Artboard") &&
-      (layer.type != "SymbolMaster") &&
-      (layer.type != "SymbolInstance") &&
-      (layer.type != "Group") &&
-      //(layer.type != "Image") &&
-      (layer.type != "Text") &&
-      (layer.type != "Shape") &&
-      //(layer.type != "ShapePath") &&
-      true) {
-      //console.log(layer.type);
-      return false;
-    }
-
-    var self = this;
-    var rect = null;
-    var pngImage = null;
-    var svgImage = null;
-    var childLayers = [];
-
-    if (layer.frame !== undefined) {
-      rect = { "x": layer.frame.x, "y": layer.frame.y, "w": layer.frame.width, "h": layer.frame.height };
-    }
-
-    if (/*(layer.type == "Artboard") || */(layer.type == "SymbolInstance") || (layer.type == "Text")) {
-      const pngOptions = { formats: "png", output: false };
-      const pngBuffer = sketch.export(layer, pngOptions);
-
-      pngImage = base64.encodeBin(pngBuffer);
-
-      const svgOptions = { formats: "svg", output: false };
-      const svgBuffer = sketch.export(layer, svgOptions);
-
-      svgImage = base64.encodeBin(svgBuffer);
-    }
-
-    if (layer.layers !== undefined) {
-      layer.layers.forEach(
-        function(l, i) {
-          if (l.type == "Artboard") {
-            var artboardLayer = self.utilEnumerateArtboardLayers(l, i, layerLevel + 1);
-            artboardLayer["parent_uuid"] = assignmentBugWorkaround(layer.id);
-            artboardLayer["level"] = layerLevel + 1;
-
-            self.jsonQueue.push(artboardLayer);
-          } else {
-            var childLayer = self.utilEnumerateDocumentLayersUpToArtboard(l, i, layerLevel + 1);
-
-            if (childLayer) {
-              childLayers.push(childLayer);
-            }
-          }
-        }
-      );
-    }
-
-    var overrides = [];
-
-    if (layer.type == "SymbolInstance") {
-      layer.overrides.forEach(function(o, i) {
-        if (o.property == "stringValue") {
-          overrides.push({
-            "path": o.path,
-            "value": o.value
-          });
-        }
-      });
-    }
-
-    return {
-      "uuid": assignmentBugWorkaround(layer.id),
-      "type": layer.type,
-      "name": layer.name,
-      "master_uuid": null,
-      "target_uuid": null,
-      "rect": rect,
-      "png_image": pngImage,
-      "svg_image": svgImage,
-      "layers": childLayers,
-      "overrides": overrides
-    };
-  }
-
-  stepEnumerateDocument() {
+  stepEnumerateDocumentLayers() {
     var self = this;
     var documentLayers = [];
 
     self.document.pages.forEach(
       function(page, pageIndex) {
-        documentLayers.push(
-          self.utilEnumerateDocumentLayersUpToArtboard(page, pageIndex, 1));
+        self.layerFilterQueue.push([page, documentLayers]);
       }
     );
 
-    self.jsonQueue.push({
-      "uuid": assignmentBugWorkaround(self.document.id),
+    var uuid = assignmentBugWorkaround(self.document.id);
+
+    self.layerUploadQueue.push({
+      "uuid": uuid,
       "type": self.document.type,
       "name": self.document.path,
       "master_uuid": null,
@@ -467,11 +442,101 @@ class StateMachine {
       "overrides": []
     });
 
-    self.callStack.splice(0, 0, self.stepGetCsrfToken);
+    self.callStack.splice(0, 0, self.stepEnumerateLayers);
     setTimeout(self.callNextItem.bind(self), 0);
   }
 
-  stepGetCsrfToken() {
+  stepEnumerateImages() {
+    var self = this;
+    var layer = self.imageFilterQueue.pop();
+
+    if (
+      (layer.type == "Page") ||
+      (layer.type == "Artboard") ||
+      (layer.type == "SymbolMaster") ||
+      (layer.type == "SymbolInstance") ||
+      (layer.type == "Group") ||
+      (layer.type == "Image") ||
+      (layer.type == "Text") ||
+      (layer.type == "Shape") ||
+      // (layer.type == "ShapePath") ||
+      false) {
+      self.objectCounter++;
+
+      if (layer.layers !== undefined) {
+        layer.layers.forEach(
+          function(l, i) {
+            self.imageFilterQueue.push(l);
+          }
+        );
+      }
+
+      if ((layer.type == "Artboard") || (layer.type == "SymbolInstance") || (layer.type == "Text")) {
+        var uuid = assignmentBugWorkaround(layer.id);
+        var imageStats = self.imageStats[uuid];
+
+        if (imageStats === undefined) {
+          imageStats = {'svg_image_size': -1, 'png_image_size': -1};
+        }
+
+        const svgOptions = { formats: "svg", output: false };
+        const svgBuffer = sketch.export(layer, svgOptions);
+
+        var svgImage = base64.encodeBin(svgBuffer);
+
+        if (svgBuffer.length != imageStats['svg_image_size']) {
+          const pngOptions = { formats: "png", output: false };
+          const pngBuffer = sketch.export(layer, pngOptions);
+
+          var pngImage = base64.encodeBin(pngBuffer);
+
+          if (pngBuffer.length != imageStats['png_image_size']) {
+            if (self.cumulativeImageUploadSize > 1024 * 1024) {
+              self.cumulativeImageUpload = [];
+              self.cumulativeImageUploadSize = 0;
+              self.imageUploadQueue.push({"images": self.cumulativeImageUpload});
+            }
+
+            self.cumulativeImageUpload.push({
+              "uuid": uuid,
+              "png_image": pngImage,
+              "svg_image": svgImage
+            });
+
+            self.imageCounter++;
+            self.cumulativeImageUploadSize += pngImage.length;
+            self.cumulativeImageUploadSize += svgImage.length;
+          }
+        } 
+      }   
+    }
+
+    if (self.imageFilterQueue.length > 0) {
+      self.callStack.splice(0, 0, self.stepEnumerateImages);
+      setTimeout(self.callNextItem.bind(self), 0);
+    } else if (self.imageUploadQueue.length > 0) {
+      self.callStack.splice(0, 0, self.stepGetImageCsrfToken);
+      setTimeout(self.callNextItem.bind(self), 0);
+    } else {
+      self.callStack.splice(0, 0, self.stepGetActionCsrfToken);
+      setTimeout(self.callNextItem.bind(self), 0);
+    }
+  }
+
+  stepEnumerateDocumentImages() {
+    var self = this;
+
+    self.document.pages.forEach(
+      function(page, pageIndex) {
+        self.imageFilterQueue.push(page);
+      }
+    );
+
+    self.callStack.splice(0, 0, self.stepEnumerateImages);
+    setTimeout(self.callNextItem.bind(self), 0);
+  }
+
+  utilGetCsrfToken(nextItem) {
     var self = this;
     var csrfTokenPattern = /csrftoken=([A-Za-z0-9]+)/s;
 
@@ -488,12 +553,7 @@ class StateMachine {
 
         if (setCookieHeader !== undefined) {
           self.webServiceToken  = csrfTokenPattern.exec(setCookieHeader)[1];
-
-          if (self.jsonQueue.length > 0) {
-            self.callStack.splice(0, 0, self.stepUploadJson);
-          } else {
-            self.callStack.splice(0, 0, self.stepEnumerateDocument);
-          }
+          self.callStack.splice(0, 0, nextItem);
         } else {
           self.hasError         = true;
           self.errorTitle       = "HTTP";
@@ -522,15 +582,27 @@ class StateMachine {
     .catch(function(error) {
       self.hasError           = true;
       self.errorTitle         = "HTTP";
-      self.errorDescription   = error.localizedDescription();
+      self.errorDescription   = self.formatError(error);
       self.webServiceToken    = undefined;
       setTimeout(self.callNextItem.bind(self), 0);
     });
   }
 
-  stepUploadJson() {
+  stepGetLayerCsrfToken() {
+    this.utilGetCsrfToken(this.stepUploadLayer);
+  }
+
+  stepGetImageCsrfToken() {
+    this.utilGetCsrfToken(this.stepUploadImage);
+  }
+
+  stepGetActionCsrfToken() {
+    this.utilGetCsrfToken(this.stepUploadAction);
+  }
+
+  stepUploadLayer() {
     var self = this;
-    var json = self.jsonQueue.pop();
+    var json = self.layerUploadQueue.pop();
 
     fetch(self.webServiceEndpoint,
     {
@@ -539,7 +611,7 @@ class StateMachine {
       headers: {
           "Cookie": "csrftoken=" + self.webServiceToken,
           "Authorization": getAuthorizationHeader(self.webServiceUsername, self.webServicePassword),
-          "Content-Type": "application/json",
+          "Content-Type": "application/json+layers",
           "X-CSRFToken": self.webServiceToken
       }
     })
@@ -569,10 +641,9 @@ class StateMachine {
             setTimeout(self.callNextItem.bind(self), 0);
           })
           .catch(function(error) {
-            console.log(error);
             self.hasError           = true;
             self.errorTitle         = "HTTP";
-            self.errorDescription   = error.localizedDescription();
+            self.errorDescription   = self.formatError(error);
 
             setTimeout(self.callNextItem.bind(self), 0);
           });
@@ -580,8 +651,194 @@ class StateMachine {
         response.json()
           .then(function(responseJson) {
             if ((response.status >= 200) && (response.status < 300)) {
-              if (self.jsonQueue.length > 0) {
-                self.callStack.splice(0, 0, self.stepGetCsrfToken);
+              if (self.layerUploadQueue.length > 0) {
+                self.callStack.splice(0, 0, self.stepGetLayerCsrfToken);
+              } else {
+                self.callStack.splice(0, 0, self.stepEnumerateDocumentImages);
+              }
+
+              self.totalSize          += Number(responseJson['size']);
+              self.totalCreateCounter += Number(responseJson['create_counter']);
+              self.totalUpdateCounter += Number(responseJson['update_counter']);
+              self.totalDeleteCounter += Number(responseJson['delete_counter']);
+              self.imageStats         = responseJson['image_stats'];
+            } else {
+              self.hasError           = true;
+              self.errorTitle         = "HTTP";
+              self.errorDescription   = response.status + ": " + response.statusText;
+            }
+
+            setTimeout(self.callNextItem.bind(self), 0);
+          })
+          .catch(function(error) {
+            self.hasError           = true;
+            self.errorTitle         = "HTTP";
+            self.errorDescription   = self.formatError(error);
+
+            setTimeout(self.callNextItem.bind(self), 0);
+          });
+      } else {
+        self.hasError           = true;
+        self.errorTitle         = "HTTP";
+        self.errorDescription   = response.status + ": " + response.statusText;
+      }
+    })
+    .catch(function(error) {
+      self.hasError           = true;
+      self.errorTitle         = "HTTP";
+      self.errorDescription   = self.formatError(error);
+
+      setTimeout(self.callNextItem.bind(self), 0);
+    });
+  }
+
+  stepUploadImage() {
+    var self = this;
+    var json = self.imageUploadQueue.pop();
+
+    fetch(self.webServiceEndpoint,
+    {
+      method: "PATCH",
+      body: json,
+      headers: {
+          "Cookie": "csrftoken=" + self.webServiceToken,
+          "Authorization": getAuthorizationHeader(self.webServiceUsername, self.webServicePassword),
+          "Content-Type": "application/json+images",
+          "X-CSRFToken": self.webServiceToken
+      }
+    })
+    .then(function(response) {
+      var contentType = response.headers.get("content-type");
+
+      if (contentType.startsWith("text/html")) { 
+        response.text()
+          .then(function(responseText) {
+            var titlePattern   = /<title>(.*)<\/title>/s;
+            var titleMatch     = titlePattern.exec(responseText);
+            var summaryPattern = /<div id="summary">(.*?)<\/div>/s;
+            var summaryMatch   = summaryPattern.exec(responseText);
+
+            self.hasError           = true;
+            self.errorTitle         = "HTTP";
+            self.errorDescription   = response.status + ": " + response.statusText;
+
+            if (titleMatch != null) {
+              self.errorDescription += "\n" + titleMatch[1];
+            }
+
+            if (summaryMatch != null) {
+              self.errorDescription += "\n" + summaryMatch[1].replace(/<\/?[a-z0-1]+>/sg, "").replace(/\n[ ]+/sg, "");
+            }
+
+            setTimeout(self.callNextItem.bind(self), 0);
+          })
+          .catch(function(error) {
+            self.hasError           = true;
+            self.errorTitle         = "HTTP";
+            self.errorDescription   = self.formatError(error);
+
+            setTimeout(self.callNextItem.bind(self), 0);
+          });
+      } else if (contentType.startsWith("application/json") || contentType.startsWith("text/json")) {
+        response.json()
+          .then(function(responseJson) {
+            if ((response.status >= 200) && (response.status < 300)) {
+              if (self.imageUploadQueue.length > 0) {
+                self.callStack.splice(0, 0, self.stepGetImageCsrfToken);
+              } else {
+                self.callStack.splice(0, 0, self.stepGetActionCsrfToken);
+              }
+
+              self.totalSize          += Number(responseJson['size']);
+              self.totalCreateCounter += Number(responseJson['create_counter']);
+              self.totalUpdateCounter += Number(responseJson['update_counter']);
+              self.totalDeleteCounter += Number(responseJson['delete_counter']);
+            } else {
+              self.hasError           = true;
+              self.errorTitle         = "HTTP";
+              self.errorDescription   = response.status + ": " + response.statusText;
+            }
+
+            setTimeout(self.callNextItem.bind(self), 0);
+          })
+          .catch(function(error) {
+            self.hasError           = true;
+            self.errorTitle         = "HTTP";
+            self.errorDescription   = self.formatError(error);
+
+            setTimeout(self.callNextItem.bind(self), 0);
+          });
+      } else {
+        self.hasError           = true;
+        self.errorTitle         = "HTTP";
+        self.errorDescription   = response.status + ": " + response.statusText;
+      }
+    })
+    .catch(function(error) {
+      self.hasError           = true;
+      self.errorTitle         = "HTTP";
+      self.errorDescription   = self.formatError(error);
+
+      setTimeout(self.callNextItem.bind(self), 0);
+    });
+  }
+
+  stepUploadAction() {
+    var self = this;
+    var json = {
+      "uuid": assignmentBugWorkaround(self.document.id),
+      "action": "convert"
+    };
+
+    fetch(self.webServiceEndpoint,
+    {
+      method: "PATCH",
+      body: json,
+      headers: {
+          "Cookie": "csrftoken=" + self.webServiceToken,
+          "Authorization": getAuthorizationHeader(self.webServiceUsername, self.webServicePassword),
+          "Content-Type": "application/json+action",
+          "X-CSRFToken": self.webServiceToken
+      }
+    })
+    .then(function(response) {
+      var contentType = response.headers.get("content-type");
+
+      if (contentType.startsWith("text/html")) { 
+        response.text()
+          .then(function(responseText) {
+            var titlePattern   = /<title>(.*)<\/title>/s;
+            var titleMatch     = titlePattern.exec(responseText);
+            var summaryPattern = /<div id="summary">(.*?)<\/div>/s;
+            var summaryMatch   = summaryPattern.exec(responseText);
+
+            self.hasError           = true;
+            self.errorTitle         = "HTTP";
+            self.errorDescription   = response.status + ": " + response.statusText;
+
+            if (titleMatch != null) {
+              self.errorDescription += "\n" + titleMatch[1];
+            }
+
+            if (summaryMatch != null) {
+              self.errorDescription += "\n" + summaryMatch[1].replace(/<\/?[a-z0-1]+>/sg, "").replace(/\n[ ]+/sg, "");
+            }
+
+            setTimeout(self.callNextItem.bind(self), 0);
+          })
+          .catch(function(error) {
+            self.hasError           = true;
+            self.errorTitle         = "HTTP";
+            self.errorDescription   = self.formatError(error);
+
+            setTimeout(self.callNextItem.bind(self), 0);
+          });
+      } else if (contentType.startsWith("application/json") || contentType.startsWith("text/json")) {
+        response.json()
+          .then(function(responseJson) {
+            if ((response.status >= 200) && (response.status < 300)) {
+              if (self.imageUploadQueue.length > 0) {
+                self.callStack.splice(0, 0, self.stepGetImageCsrfToken);
               } else {
                 self.callStack.splice(0, 0, self.stepReportSuccess);
               }
@@ -599,10 +856,9 @@ class StateMachine {
             setTimeout(self.callNextItem.bind(self), 0);
           })
           .catch(function(error) {
-            console.log(error);
             self.hasError           = true;
             self.errorTitle         = "HTTP";
-            self.errorDescription   = error.localizedDescription();
+            self.errorDescription   = self.formatError(error);
 
             setTimeout(self.callNextItem.bind(self), 0);
           });
@@ -613,10 +869,9 @@ class StateMachine {
       }
     })
     .catch(function(error) {
-      console.log(error);
       self.hasError           = true;
       self.errorTitle         = "HTTP";
-      self.errorDescription   = error.localizedDescription();
+      self.errorDescription   = self.formatError(error);
 
       setTimeout(self.callNextItem.bind(self), 0);
     });
@@ -624,17 +879,7 @@ class StateMachine {
 
   stepReportSuccess() {
     var self = this;
-    var bytesText = null;
-
-    if (self.totalSize < 1024) {
-      bytesText = self.totalSize + " bytes";
-    } else if (self.totalSize < 1024 * 1024) {
-      bytesText = Math.round(self.totalSize / 1024.0) + " Kb";
-    } else if (self.totalSize < 1024 * 1024 * 1024) {
-      bytesText = Math.round(self.totalSize / (1024.0 * 1024.0)) + " Mb";
-    } else {
-      bytesText = Math.round(self.totalSize / (1024.0 * 1024.0 * 1024.0)) + " Gb";
-    }
+    var bytesText = this.formatSize(self.totalSize);
 
     ui.alert(
       "SUCCESS",
@@ -642,7 +887,8 @@ class StateMachine {
       " * " + bytesText + " uploaded.\n" +
       " * " + self.totalCreateCounter + " objects created.\n" +
       " * " + self.totalUpdateCounter + " objects updated.\n" +
-      " * " + self.totalDeleteCounter + " objects deleted.\n");
+      " * " + self.totalDeleteCounter + " objects deleted.\n" +
+      Math.round((Date.now() - self.timeFrom) / 1000) + " seconds spent.");
   }
 }
 
@@ -656,7 +902,6 @@ export default function() {
     return;
   }
 
-  //var url = "https://roman-akopov.code.spacebank.xyz/sketch/upload";
   var stateMachine = new StateMachine(document);
 
   setTimeout(stateMachine.stepStart.bind(stateMachine), 0);
