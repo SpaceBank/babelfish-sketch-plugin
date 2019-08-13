@@ -24,9 +24,6 @@ class StateMachine {
     this.hasError                 = false;
     this.errorTitle               = undefined;
     this.errorDescription         = undefined;
-    this.isFirstTimeEndpointInput = settings.sessionVariable("is-first-time-endpoint-input") != "true";
-    this.isFirstTimeUsernameInput = settings.sessionVariable("is-first-time-username-input") != "true";
-    this.isFirstTimePasswordInput = settings.sessionVariable("is-first-time-password-input") != "true";
 
     this.webServiceEndpoint = undefined;
     this.webServiceUsername = undefined;
@@ -67,21 +64,17 @@ class StateMachine {
     this.prevTotalDeleteCounter = 0;
 
     this.timeFrom = Date.now()
-
-    settings.setSessionVariable("is-first-time-endpoint-input", "true");
-    settings.setSessionVariable("is-first-time-username-input", "true");
-    settings.setSessionVariable("is-first-time-password-input", "true");
   }
 
   formatSize(byteNumber) {
     if (byteNumber < 1024) {
       return byteNumber + " bytes";
-    } else if (byteNumber < 1024 * 1024) {
-      return Math.round(byteNumber / 1024.0) + " Kb";
-    } else if (byteNumber < 1024 * 1024 * 1024) {
-      return Math.round(byteNumber / (1024.0 * 1024.0)) + " Mb";
+    } else if (byteNumber < 2 * 1024 * 1024) {
+      return (Math.round(10 * byteNumber / 1024.0) / 10.0) + " Kb";
+    } else if (byteNumber < 2 * 1024 * 1024 * 1024) {
+      return (Math.round(10 * byteNumber / (1024.0 * 1024.0)) / 10.0) + " Mb";
     } else {
-      return Math.round(byteNumber / (1024.0 * 1024.0 * 1024.0)) + " Gb";
+      return (Math.round(10 * byteNumber / (1024.0 * 1024.0 * 1024.0)) / 10.0) + " Gb";
     }
   }
 
@@ -91,6 +84,33 @@ class StateMachine {
     } else {
       return String(errror);
     }
+  }
+
+  documentSessionBoolean(prefix, defaultValue, newValue) {
+    var fullName = prefix + assignmentBugWorkaround(this.document.id);
+    var oldValue = settings.sessionVariable(fullName);
+
+    if (newValue !== undefined) {
+      settings.setSessionVariable(fullName, Boolean(newValue));
+    }
+
+    if (oldValue === undefined) {
+      return Boolean(defaultValue);
+    }
+
+    return Boolean(oldValue);
+  }
+
+  isFirstTimeEndpointInput(newValue) {
+    return this.documentSessionBoolean("is-first-time-endpoint-input-", true, newValue);
+  }
+
+  isFirstTimeUsernameInput(newValue) {
+    return this.documentSessionBoolean("is-first-time-username-input-", true, newValue);
+  }
+
+  isFirstTimePasswordInput(newValue) {
+    return this.documentSessionBoolean("is-first-time-password-input-", true, newValue);
   }
 
   callNextItem() {
@@ -185,7 +205,11 @@ class StateMachine {
       setTimeout(item.bind(self), 1);
 
       if ((self.prevCallItem.name != 'stepEnumerateLayers') && (self.prevCallItem.name != 'stepEnumerateImages')) {
-        console.log(self.prevCallItem.name + " { // " + new Date(Date.now()).toISOString());
+        if (self.prevCallItem.name == "stepReportSuccess") {
+          console.log(self.prevCallItem.name + " { } // " + new Date(Date.now()).toISOString());
+        } else {
+          console.log(self.prevCallItem.name + " { // " + new Date(Date.now()).toISOString());
+        }
       }
     }
   }
@@ -204,8 +228,7 @@ class StateMachine {
       self.webServiceEndpoint = settings.documentSettingForKey(self.document, "webservice-endpoint");
     }
 
-    if (self.isFirstTimeEndpointInput || (self.webServiceEndpoint === undefined) || (self.webServiceEndpoint === null)) {
-      self.isFirstTimeEndpointInput = false;
+    if (self.isFirstTimeEndpointInput(false) || (self.webServiceEndpoint === undefined) || (self.webServiceEndpoint === null)) {
       self.callStack.splice(0, 0, self.stepInputEndpoint);
     } else {
       self.callStack.splice(0, 0, self.stepCheckUsername);
@@ -221,8 +244,7 @@ class StateMachine {
       self.webServiceUsername = settings.documentSettingForKey(self.document, "webservice-username");
     }
 
-    if (self.isFirstTimeUsernameInput || (self.webServiceUsername === undefined) || (self.webServiceUsername === null)) {
-      self.isFirstTimeUsernameInput = false;
+    if (self.isFirstTimeUsernameInput(false) || (self.webServiceUsername === undefined) || (self.webServiceUsername === null)) {
       self.callStack.splice(0, 0, self.stepInputUsername);
     } else {
       self.callStack.splice(0, 0, self.stepCheckPassword);
@@ -238,8 +260,7 @@ class StateMachine {
       self.webServicePassword = settings.documentSettingForKey(self.document, "webservice-password");
     }
 
-    if (self.isFirstTimePasswordInput || (self.webServicePassword === undefined) || (self.webServicePassword === null)) {
-      self.isFirstTimePasswordInput = false;
+    if (self.isFirstTimePasswordInput(false) || (self.webServicePassword === undefined) || (self.webServicePassword === null)) {
       self.callStack.splice(0, 0, self.stepInputPassword);
     } else {
       self.callStack.splice(0, 0, self.stepEnumerateDocumentLayers);
@@ -320,14 +341,14 @@ class StateMachine {
   stepReAskEndpoint() {
     var self = this;
 
-    self.isFirstTimeEndpointInput = true;
+    self.isFirstTimeEndpointInput(true);
     setTimeout(self.callNextItem.bind(self), 0);
   }
 
   stepReAskUsername() {
     var self = this;
 
-    self.isFirstTimeUsernameInput = true;
+    self.isFirstTimeUsernameInput(true);
     setTimeout(self.callNextItem.bind(self), 0);
   }
 
@@ -346,6 +367,10 @@ class StateMachine {
     var layer = item[0];
     var parentLayers = item[1];
 
+    if ((layer.type == "Page") && (layer.name == "Assets")) {
+      return;
+    }
+
     if (
       (layer.type == "Page") ||
       (layer.type == "Artboard") ||
@@ -360,6 +385,7 @@ class StateMachine {
       self.objectCounter++;
 
       var rect = null;
+      var masterUuid = null;
       var childLayers = [];
 
       if (layer.frame !== undefined) {
@@ -375,6 +401,7 @@ class StateMachine {
       }
 
       var overrides = [];
+      var text = null;
 
       if (layer.type == "SymbolInstance") {
         layer.overrides.forEach(function(o, i) {
@@ -385,6 +412,12 @@ class StateMachine {
             });
           }
         });
+
+        masterUuid = assignmentBugWorkaround(layer.master.id);
+      }
+
+      if (layer.type == "Text") {
+        text = layer.text;
       }
 
       var uuid = assignmentBugWorkaround(layer.id); 
@@ -393,8 +426,9 @@ class StateMachine {
         "uuid": uuid,
         "type": layer.type,
         "name": layer.name,
-        "master_uuid": null,
+        "master_uuid": masterUuid,
         "target_uuid": null,
+        "text": text,
         "rect": rect,
         "png_image": null,
         "svg_image": null,
@@ -450,6 +484,10 @@ class StateMachine {
     var self = this;
     var layer = self.imageFilterQueue.pop();
 
+    if ((layer.type == "Page") && (layer.name == "Assets")) {
+      return;
+    }
+
     if (
       (layer.type == "Page") ||
       (layer.type == "Artboard") ||
@@ -471,7 +509,38 @@ class StateMachine {
         );
       }
 
-      if ((layer.type == "Artboard") || (layer.type == "SymbolInstance") || (layer.type == "Text")) {
+      if (layer.type == "Artboard") {
+        var uuid = assignmentBugWorkaround(layer.id);
+        var imageStats = self.imageStats[uuid];
+
+        if (imageStats === undefined) {
+          imageStats = {'png_image_size': -1};
+        }
+
+        const pngOptions = { formats: "png", output: false };
+        const pngBuffer = sketch.export(layer, pngOptions);
+
+        var pngImage = base64.encodeBin(pngBuffer);
+
+        if (pngBuffer.length != imageStats['png_image_size']) {
+          if (self.cumulativeImageUploadSize > 1024 * 1024) {
+            self.cumulativeImageUpload = [];
+            self.cumulativeImageUploadSize = 0;
+            self.imageUploadQueue.push({"images": self.cumulativeImageUpload});
+          }
+
+          self.cumulativeImageUpload.push({
+            "uuid": uuid,
+            "png_image": pngImage,
+            "svg_image": null
+          });
+
+          self.imageCounter++;
+          self.cumulativeImageUploadSize += pngImage.length;
+        }
+      }
+
+      if (layer.type == "Text") {
         var uuid = assignmentBugWorkaround(layer.id);
         var imageStats = self.imageStats[uuid];
 
@@ -508,18 +577,24 @@ class StateMachine {
             self.cumulativeImageUploadSize += svgImage.length;
           }
         } 
-      }   
+      }
     }
 
     if (self.imageFilterQueue.length > 0) {
       self.callStack.splice(0, 0, self.stepEnumerateImages);
       setTimeout(self.callNextItem.bind(self), 0);
-    } else if (self.imageUploadQueue.length > 0) {
-      self.callStack.splice(0, 0, self.stepGetImageCsrfToken);
-      setTimeout(self.callNextItem.bind(self), 0);
     } else {
-      self.callStack.splice(0, 0, self.stepGetActionCsrfToken);
-      setTimeout(self.callNextItem.bind(self), 0);
+      self.cumulativeImageUpload = [];
+      self.cumulativeImageUploadSize = 0;
+      self.imageUploadQueue.push({"images": self.cumulativeImageUpload});
+
+      if (self.imageUploadQueue.length > 0) {
+        self.callStack.splice(0, 0, self.stepGetImageCsrfToken);
+        setTimeout(self.callNextItem.bind(self), 0);
+      } else {
+        self.callStack.splice(0, 0, self.stepGetActionCsrfToken);
+        setTimeout(self.callNextItem.bind(self), 0);
+      }
     }
   }
 
