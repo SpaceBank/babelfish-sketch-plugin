@@ -13,7 +13,7 @@ function assignmentBugWorkaround(buggyValue) {
 
 
 function getAuthorizationHeader(username, password) {
-    return "Basic " + base64.encodeStr(username + ":" + password);
+  return "Basic " + base64.encodeStr(username + ":" + password);
 }
 
 
@@ -81,8 +81,10 @@ class StateMachine {
   formatError(error) {
     if (typeof error.localizedDescription === "function") {
       return error.localizedDescription();
+    } else if (typeof error.nativeException === "object") {
+      return String(error) + "\n" + String(error.nativeException);
     } else {
-      return String(errror);
+      return String(error);
     }
   }
 
@@ -279,7 +281,7 @@ class StateMachine {
         if (err) {
           self.webServiceEndpoint = undefined;
           self.hasError           = true;
-          self.errorTitle         = "USER INPUT";
+          self.errorTitle         = "USER INPUT (A01)";
           self.errorDescription   = "Endpoint is required.";
         } else {
           self.webServiceEndpoint = value;
@@ -302,7 +304,7 @@ class StateMachine {
         if (err) {
           self.webServiceUsername = undefined;
           self.hasError           = true;
-          self.errorTitle         = "USER INPUT";
+          self.errorTitle         = "USER INPUT (B01)";
           self.errorDescription   = "Username is required.";
         } else {
           self.webServiceUsername = value;
@@ -325,7 +327,7 @@ class StateMachine {
         if (err) {
           self.webServicePassword = undefined;
           self.hasError           = true;
-          self.errorTitle         = "USER INPUT";
+          self.errorTitle         = "USER INPUT (C01)";
           self.errorDescription   = "Password is required.";
         } else {
           self.webServicePassword = value;
@@ -352,12 +354,10 @@ class StateMachine {
     setTimeout(self.callNextItem.bind(self), 0);
   }
 
-  stepClearPassword() {
+  stepReAskPassword() {
     var self = this;
 
-    self.webServicePassword = undefined;
-    settings.setSessionVariable("webservice-password", undefined);
-    //self.callStack.splice(0, 0, self.stepInputUsername);
+    self.isFirstTimePasswordInput(true);
     setTimeout(self.callNextItem.bind(self), 0);
   }
 
@@ -367,74 +367,72 @@ class StateMachine {
     var layer = item[0];
     var parentLayers = item[1];
 
-    if ((layer.type == "Page") && (layer.name == "Assets")) {
-      return;
-    }
+    if ((layer.type != "Page") || (layer.name != "Assets")) {
+      if (
+        (layer.type == "Page") ||
+        (layer.type == "Artboard") ||
+        (layer.type == "SymbolMaster") ||
+        (layer.type == "SymbolInstance") ||
+        (layer.type == "Group") ||
+        (layer.type == "Image") ||
+        (layer.type == "Text") ||
+        (layer.type == "Shape") ||
+        // (layer.type == "ShapePath") ||
+        false) {
+        self.objectCounter++;
 
-    if (
-      (layer.type == "Page") ||
-      (layer.type == "Artboard") ||
-      (layer.type == "SymbolMaster") ||
-      (layer.type == "SymbolInstance") ||
-      (layer.type == "Group") ||
-      (layer.type == "Image") ||
-      (layer.type == "Text") ||
-      (layer.type == "Shape") ||
-      // (layer.type == "ShapePath") ||
-      false) {
-      self.objectCounter++;
+        var rect = null;
+        var masterUuid = null;
+        var childLayers = [];
 
-      var rect = null;
-      var masterUuid = null;
-      var childLayers = [];
+        if (layer.frame !== undefined) {
+          rect = { "x": layer.frame.x, "y": layer.frame.y, "w": layer.frame.width, "h": layer.frame.height };
+        }
 
-      if (layer.frame !== undefined) {
-        rect = { "x": layer.frame.x, "y": layer.frame.y, "w": layer.frame.width, "h": layer.frame.height };
-      }
+        if (layer.layers !== undefined) {
+          layer.layers.forEach(
+            function(l, i) {
+              self.layerFilterQueue.push([l, childLayers]);
+            }
+          );
+        }
 
-      if (layer.layers !== undefined) {
-        layer.layers.forEach(
-          function(l, i) {
-            self.layerFilterQueue.push([l, childLayers]);
-          }
-        );
-      }
+        var overrides = [];
+        var text = null;
 
-      var overrides = [];
-      var text = null;
+        if (layer.type == "SymbolInstance") {
+          layer.overrides.forEach(function(o, i) {
+            if (o.property == "stringValue") {
+              overrides.push({
+                "path": o.path,
+                "value": o.value
+              });
+            }
+          });
 
-      if (layer.type == "SymbolInstance") {
-        layer.overrides.forEach(function(o, i) {
-          if (o.property == "stringValue") {
-            overrides.push({
-              "path": o.path,
-              "value": o.value
-            });
-          }
+          masterUuid = assignmentBugWorkaround(layer.master.id);
+        }
+
+        if (layer.type == "Text") {
+          text = layer.text;
+        }
+
+        var uuid = assignmentBugWorkaround(layer.id); 
+
+        parentLayers.push({
+          "uuid": uuid,
+          "type": layer.type,
+          "name": layer.name,
+          "master_uuid": masterUuid,
+          "target_uuid": null,
+          "text": text,
+          "rect": rect,
+          "png_image": null,
+          "svg_image": null,
+          "layers": childLayers,
+          "overrides": overrides
         });
-
-        masterUuid = assignmentBugWorkaround(layer.master.id);
       }
-
-      if (layer.type == "Text") {
-        text = layer.text;
-      }
-
-      var uuid = assignmentBugWorkaround(layer.id); 
-
-      parentLayers.push({
-        "uuid": uuid,
-        "type": layer.type,
-        "name": layer.name,
-        "master_uuid": masterUuid,
-        "target_uuid": null,
-        "text": text,
-        "rect": rect,
-        "png_image": null,
-        "svg_image": null,
-        "layers": childLayers,
-        "overrides": overrides
-      });
     }
 
     if (self.layerFilterQueue.length > 0) {
@@ -464,11 +462,9 @@ class StateMachine {
     self.layerUploadQueue.push({
       "uuid": uuid,
       "type": self.document.type,
-      "name": self.document.path,
+      "name": self.document.path === undefined ? "Document Is Not Saved" : self.document.path,
       "master_uuid": null,
       "target_uuid": null,
-      //"parent_uuid": null,
-      //"level": 0,
       "rect": null,
       "png_image": null,
       "svg_image": null,
@@ -484,76 +480,36 @@ class StateMachine {
     var self = this;
     var layer = self.imageFilterQueue.pop();
 
-    if ((layer.type == "Page") && (layer.name == "Assets")) {
-      return;
-    }
+    if ((layer.type != "Page") || (layer.name != "Assets")) {
+      if (
+        (layer.type == "Page") ||
+        (layer.type == "Artboard") ||
+        (layer.type == "SymbolMaster") ||
+        (layer.type == "SymbolInstance") ||
+        (layer.type == "Group") ||
+        (layer.type == "Image") ||
+        (layer.type == "Text") ||
+        (layer.type == "Shape") ||
+        // (layer.type == "ShapePath") ||
+        false) {
+        self.objectCounter++;
 
-    if (
-      (layer.type == "Page") ||
-      (layer.type == "Artboard") ||
-      (layer.type == "SymbolMaster") ||
-      (layer.type == "SymbolInstance") ||
-      (layer.type == "Group") ||
-      (layer.type == "Image") ||
-      (layer.type == "Text") ||
-      (layer.type == "Shape") ||
-      // (layer.type == "ShapePath") ||
-      false) {
-      self.objectCounter++;
-
-      if (layer.layers !== undefined) {
-        layer.layers.forEach(
-          function(l, i) {
-            self.imageFilterQueue.push(l);
-          }
-        );
-      }
-
-      if (layer.type == "Artboard") {
-        var uuid = assignmentBugWorkaround(layer.id);
-        var imageStats = self.imageStats[uuid];
-
-        if (imageStats === undefined) {
-          imageStats = {'png_image_size': -1};
+        if (layer.layers !== undefined) {
+          layer.layers.forEach(
+            function(l, i) {
+              self.imageFilterQueue.push(l);
+            }
+          );
         }
 
-        const pngOptions = { formats: "png", output: false };
-        const pngBuffer = sketch.export(layer, pngOptions);
+        if (layer.type == "Artboard") {
+          var uuid = assignmentBugWorkaround(layer.id);
+          var imageStats = self.imageStats[uuid];
 
-        var pngImage = base64.encodeBin(pngBuffer);
-
-        if (pngBuffer.length != imageStats['png_image_size']) {
-          if (self.cumulativeImageUploadSize > 1024 * 1024) {
-            self.cumulativeImageUpload = [];
-            self.cumulativeImageUploadSize = 0;
-            self.imageUploadQueue.push({"images": self.cumulativeImageUpload});
+          if (imageStats === undefined) {
+            imageStats = {'png_image_size': -1};
           }
 
-          self.cumulativeImageUpload.push({
-            "uuid": uuid,
-            "png_image": pngImage,
-            "svg_image": null
-          });
-
-          self.imageCounter++;
-          self.cumulativeImageUploadSize += pngImage.length;
-        }
-      }
-
-      if (layer.type == "Text") {
-        var uuid = assignmentBugWorkaround(layer.id);
-        var imageStats = self.imageStats[uuid];
-
-        if (imageStats === undefined) {
-          imageStats = {'svg_image_size': -1, 'png_image_size': -1};
-        }
-
-        const svgOptions = { formats: "svg", output: false };
-        const svgBuffer = sketch.export(layer, svgOptions);
-
-        var svgImage = base64.encodeBin(svgBuffer);
-
-        if (svgBuffer.length != imageStats['svg_image_size']) {
           const pngOptions = { formats: "png", output: false };
           const pngBuffer = sketch.export(layer, pngOptions);
 
@@ -569,14 +525,52 @@ class StateMachine {
             self.cumulativeImageUpload.push({
               "uuid": uuid,
               "png_image": pngImage,
-              "svg_image": svgImage
+              "svg_image": null
             });
 
             self.imageCounter++;
             self.cumulativeImageUploadSize += pngImage.length;
-            self.cumulativeImageUploadSize += svgImage.length;
           }
-        } 
+        }
+
+        if (layer.type == "Text") {
+          var uuid = assignmentBugWorkaround(layer.id);
+          var imageStats = self.imageStats[uuid];
+
+          if (imageStats === undefined) {
+            imageStats = {'svg_image_size': -1, 'png_image_size': -1};
+          }
+
+          const svgOptions = { formats: "svg", output: false };
+          const svgBuffer = sketch.export(layer, svgOptions);
+
+          var svgImage = base64.encodeBin(svgBuffer);
+
+          if (svgBuffer.length != imageStats['svg_image_size']) {
+            const pngOptions = { formats: "png", output: false };
+            const pngBuffer = sketch.export(layer, pngOptions);
+
+            var pngImage = base64.encodeBin(pngBuffer);
+
+            if (pngBuffer.length != imageStats['png_image_size']) {
+              if (self.cumulativeImageUploadSize > 1024 * 1024) {
+                self.cumulativeImageUpload = [];
+                self.cumulativeImageUploadSize = 0;
+                self.imageUploadQueue.push({"images": self.cumulativeImageUpload});
+              }
+
+              self.cumulativeImageUpload.push({
+                "uuid": uuid,
+                "png_image": pngImage,
+                "svg_image": svgImage
+              });
+
+              self.imageCounter++;
+              self.cumulativeImageUploadSize += pngImage.length;
+              self.cumulativeImageUploadSize += svgImage.length;
+            }
+          } 
+        }
       }
     }
 
@@ -631,32 +625,32 @@ class StateMachine {
           self.callStack.splice(0, 0, nextItem);
         } else {
           self.hasError         = true;
-          self.errorTitle       = "HTTP";
+          self.errorTitle       = "HTTP (A01)";
           self.errorDescription = "Server returned no CSRF token cookie.";
           self.webServiceToken  = undefined;
         }
       } else if (response.status == 403) {
         self.hasError           = true;
-        self.errorTitle         = "HTTP";
+        self.errorTitle         = "HTTP (A02)";
         self.errorDescription   = "Authentication failed.\n" + response.status + ": " + response.statusText;
         self.webServiceToken    = undefined;
         self.callStack.splice(0, 0, self.stepReAskUsername);
-        self.callStack.splice(0, 0, self.stepClearPassword);
+        self.callStack.splice(0, 0, self.stepReAskPassword);
       } else {
         self.hasError           = true;
-        self.errorTitle         = "HTTP";
+        self.errorTitle         = "HTTP (A03)";
         self.errorDescription   = response.status + ": " + response.statusText;
         self.webServiceToken    = undefined;
         self.callStack.splice(0, 0, self.stepReAskEndpoint);
         self.callStack.splice(0, 0, self.stepReAskUsername);
-        self.callStack.splice(0, 0, self.stepClearPassword);
+        self.callStack.splice(0, 0, self.stepReAskPassword);
       }
 
       setTimeout(self.callNextItem.bind(self), 0);
     })
     .catch(function(error) {
       self.hasError           = true;
-      self.errorTitle         = "HTTP";
+      self.errorTitle         = "HTTP (A04)";
       self.errorDescription   = self.formatError(error);
       self.webServiceToken    = undefined;
       setTimeout(self.callNextItem.bind(self), 0);
@@ -693,7 +687,7 @@ class StateMachine {
     .then(function(response) {
       var contentType = response.headers.get("content-type");
 
-      if (contentType.startsWith("text/html")) { 
+      if (contentType.startsWith("text/html")) {
         response.text()
           .then(function(responseText) {
             var titlePattern   = /<title>(.*)<\/title>/s;
@@ -702,7 +696,7 @@ class StateMachine {
             var summaryMatch   = summaryPattern.exec(responseText);
 
             self.hasError           = true;
-            self.errorTitle         = "HTTP";
+            self.errorTitle         = "HTTP (B01)";
             self.errorDescription   = response.status + ": " + response.statusText;
 
             if (titleMatch != null) {
@@ -717,7 +711,7 @@ class StateMachine {
           })
           .catch(function(error) {
             self.hasError           = true;
-            self.errorTitle         = "HTTP";
+            self.errorTitle         = "HTTP (B02)";
             self.errorDescription   = self.formatError(error);
 
             setTimeout(self.callNextItem.bind(self), 0);
@@ -739,7 +733,7 @@ class StateMachine {
               self.imageStats         = responseJson['image_stats'];
             } else {
               self.hasError           = true;
-              self.errorTitle         = "HTTP";
+              self.errorTitle         = "HTTP (B03)";
               self.errorDescription   = response.status + ": " + response.statusText;
             }
 
@@ -747,20 +741,20 @@ class StateMachine {
           })
           .catch(function(error) {
             self.hasError           = true;
-            self.errorTitle         = "HTTP";
+            self.errorTitle         = "HTTP (B04)";
             self.errorDescription   = self.formatError(error);
 
             setTimeout(self.callNextItem.bind(self), 0);
           });
       } else {
         self.hasError           = true;
-        self.errorTitle         = "HTTP";
+        self.errorTitle         = "HTTP (B05)";
         self.errorDescription   = response.status + ": " + response.statusText;
       }
     })
     .catch(function(error) {
       self.hasError           = true;
-      self.errorTitle         = "HTTP";
+      self.errorTitle         = "HTTP (B06)";
       self.errorDescription   = self.formatError(error);
 
       setTimeout(self.callNextItem.bind(self), 0);
@@ -794,7 +788,7 @@ class StateMachine {
             var summaryMatch   = summaryPattern.exec(responseText);
 
             self.hasError           = true;
-            self.errorTitle         = "HTTP";
+            self.errorTitle         = "HTTP (C01)";
             self.errorDescription   = response.status + ": " + response.statusText;
 
             if (titleMatch != null) {
@@ -809,7 +803,7 @@ class StateMachine {
           })
           .catch(function(error) {
             self.hasError           = true;
-            self.errorTitle         = "HTTP";
+            self.errorTitle         = "HTTP (C02)";
             self.errorDescription   = self.formatError(error);
 
             setTimeout(self.callNextItem.bind(self), 0);
@@ -830,7 +824,7 @@ class StateMachine {
               self.totalDeleteCounter += Number(responseJson['delete_counter']);
             } else {
               self.hasError           = true;
-              self.errorTitle         = "HTTP";
+              self.errorTitle         = "HTTP (C03)";
               self.errorDescription   = response.status + ": " + response.statusText;
             }
 
@@ -838,20 +832,20 @@ class StateMachine {
           })
           .catch(function(error) {
             self.hasError           = true;
-            self.errorTitle         = "HTTP";
+            self.errorTitle         = "HTTP (C04)";
             self.errorDescription   = self.formatError(error);
 
             setTimeout(self.callNextItem.bind(self), 0);
           });
       } else {
         self.hasError           = true;
-        self.errorTitle         = "HTTP";
+        self.errorTitle         = "HTTP (C05)";
         self.errorDescription   = response.status + ": " + response.statusText;
       }
     })
     .catch(function(error) {
       self.hasError           = true;
-      self.errorTitle         = "HTTP";
+      self.errorTitle         = "HTTP (C06)";
       self.errorDescription   = self.formatError(error);
 
       setTimeout(self.callNextItem.bind(self), 0);
@@ -888,7 +882,7 @@ class StateMachine {
             var summaryMatch   = summaryPattern.exec(responseText);
 
             self.hasError           = true;
-            self.errorTitle         = "HTTP";
+            self.errorTitle         = "HTTP (D01)";
             self.errorDescription   = response.status + ": " + response.statusText;
 
             if (titleMatch != null) {
@@ -903,7 +897,7 @@ class StateMachine {
           })
           .catch(function(error) {
             self.hasError           = true;
-            self.errorTitle         = "HTTP";
+            self.errorTitle         = "HTTP (D02)";
             self.errorDescription   = self.formatError(error);
 
             setTimeout(self.callNextItem.bind(self), 0);
@@ -924,7 +918,7 @@ class StateMachine {
               self.totalDeleteCounter += Number(responseJson['delete_counter']);
             } else {
               self.hasError           = true;
-              self.errorTitle         = "HTTP";
+              self.errorTitle         = "HTTP (D03)";
               self.errorDescription   = response.status + ": " + response.statusText;
             }
 
@@ -932,20 +926,20 @@ class StateMachine {
           })
           .catch(function(error) {
             self.hasError           = true;
-            self.errorTitle         = "HTTP";
+            self.errorTitle         = "HTTP (D04)";
             self.errorDescription   = self.formatError(error);
 
             setTimeout(self.callNextItem.bind(self), 0);
           });
       } else {
         self.hasError           = true;
-        self.errorTitle         = "HTTP";
+        self.errorTitle         = "HTTP (D05)";
         self.errorDescription   = response.status + ": " + response.statusText;
       }
     })
     .catch(function(error) {
       self.hasError           = true;
-      self.errorTitle         = "HTTP";
+      self.errorTitle         = "HTTP (D06)";
       self.errorDescription   = self.formatError(error);
 
       setTimeout(self.callNextItem.bind(self), 0);
