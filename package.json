@@ -5,6 +5,8 @@
   "engines": {
     "sketch": ">=49.0"
   },
+  "description": "SpaceBank Globalization System Plug-In",
+  "repository": "https://github.com/SpaceBank/GlobalizationSystemSketchPlugIn",
   "skpm": {
     "name": "space-globalization",
     "manifest": "src/manifest.json",
