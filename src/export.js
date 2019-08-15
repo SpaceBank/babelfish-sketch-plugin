@@ -30,6 +30,7 @@ class StateMachine {
     this.webServicePassword = undefined;
     this.webServiceToken    = undefined;
 
+    this.artboardCounter           = 0;
     this.layerCounter              = 0;
     this.layerFilterQueue          = [];
     this.layerUploadQueue          = [];
@@ -51,6 +52,7 @@ class StateMachine {
     this.prevWebServicePassword = undefined;
     this.prevWebServiceToken    = undefined;
 
+    this.prevArtboardCounter        = 0;
     this.prevLayerCounter           = 0;
     this.prevLayerFilterQueueLength = 0;
     this.prevLayerUploadQueueLength = 0;
@@ -63,7 +65,8 @@ class StateMachine {
     this.prevTotalUpdateCounter = 0;
     this.prevTotalDeleteCounter = 0;
 
-    this.timeFrom = Date.now()
+    this.totalTimeFrom = Date.now();
+    this.stepTimeFrom = null;
   }
 
   formatSize(byteNumber) {
@@ -115,10 +118,20 @@ class StateMachine {
     return this.documentSessionBoolean("is-first-time-password-input-", true, newValue);
   }
 
+  enqueueNextItem(func, name) {
+    this.callStack.splice(0, 0, [func.bind(this), name]);
+  }
+
+  enqueueNextCall() {
+    setTimeout(this.callNextItem.bind(this), 1);
+  }
+
   callNextItem() {
     var self = this;
 
     if (self.prevCallItem != null) {
+      var stepDuration = (Date.now() - self.stepTimeFrom);
+
       if (self.prevWebServiceEndpoint != self.webServiceEndpoint) {
         console.log("    Endpoint = \"" + self.webServiceEndpoint + "\"; // was \"" + self.prevWebServiceEndpoint + "\".");
         self.prevWebServiceEndpoint = self.webServiceEndpoint;
@@ -139,11 +152,10 @@ class StateMachine {
         self.prevWebServiceToken = self.webServiceToken;
       }
 
-      if (self.prevLayerCounter < self.layerCounter) {
-        if (self.layerCounter % 10 == 0) {
-          ui.message(self.layerCounter + " layers found.");
-        }
+      if (self.prevArtboardCounter < self.artboardCounter) {
+        ui.message(self.artboardCounter + " artboards found (" + self.layerCounter + " layers).");
 
+        self.prevArtboardCounter = self.artboardCounter;
         self.prevLayerCounter = self.layerCounter;
       }
 
@@ -188,8 +200,8 @@ class StateMachine {
         self.prevTotalDeleteCounter = self.totalDeleteCounter;
       }
 
-      if ((self.prevCallItem.name != 'stepEnumerateLayers') && (self.prevCallItem.name != 'stepEnumerateImages')) {
-        console.log('} // ' + self.prevCallItem.name + "; " + new Date(Date.now()).toISOString());
+      if ((self.prevCallItem[1] != 'stepEnumerateLayers') && (self.prevCallItem[1] != 'stepEnumerateImages')) {
+        console.log('} // ' + self.prevCallItem[1] + "; " + stepDuration + "ms; " + new Date(Date.now()).toISOString());
       }
     }
 
@@ -203,14 +215,15 @@ class StateMachine {
       var item = self.callStack.pop();
 
       self.prevCallItem = item;
+      self.stepTimeFrom = Date.now();
 
-      setTimeout(item.bind(self), 1);
+      setTimeout(item[0], 1);
 
-      if ((self.prevCallItem.name != 'stepEnumerateLayers') && (self.prevCallItem.name != 'stepEnumerateImages')) {
-        if (self.prevCallItem.name == "stepReportSuccess") {
-          console.log(self.prevCallItem.name + " { } // " + new Date(Date.now()).toISOString());
+      if ((self.prevCallItem[1] != 'stepEnumerateLayers') && (self.prevCallItem[1] != 'stepEnumerateImages')) {
+        if (self.prevCallItem[1] == "stepReportSuccess") {
+          console.log(self.prevCallItem[1] + " { } // " + new Date(Date.now()).toISOString());
         } else {
-          console.log(self.prevCallItem.name + " { // " + new Date(Date.now()).toISOString());
+          console.log(self.prevCallItem[1] + " { // " + new Date(Date.now()).toISOString());
         }
       }
     }
@@ -219,8 +232,8 @@ class StateMachine {
   stepStart() {
     var self = this;
 
-    self.callStack.splice(0, 0, self.stepCheckEndpoint);
-    setTimeout(self.callNextItem.bind(self), 0);
+    self.enqueueNextItem(self.stepCheckEndpoint, "stepCheckEndpoint");
+    self.enqueueNextCall();
   }
 
   stepCheckEndpoint() {
@@ -231,12 +244,12 @@ class StateMachine {
     }
 
     if (self.isFirstTimeEndpointInput(false) || (self.webServiceEndpoint === undefined) || (self.webServiceEndpoint === null)) {
-      self.callStack.splice(0, 0, self.stepInputEndpoint);
+      self.enqueueNextItem(self.stepInputEndpoint, "stepInputEndpoint");
     } else {
-      self.callStack.splice(0, 0, self.stepCheckUsername);
+      self.enqueueNextItem(self.stepCheckUsername, "stepCheckUsername");
     }
 
-    setTimeout(self.callNextItem.bind(self), 0);
+    self.enqueueNextCall();
   }
 
   stepCheckUsername() {
@@ -247,12 +260,12 @@ class StateMachine {
     }
 
     if (self.isFirstTimeUsernameInput(false) || (self.webServiceUsername === undefined) || (self.webServiceUsername === null)) {
-      self.callStack.splice(0, 0, self.stepInputUsername);
+      self.enqueueNextItem(self.stepInputUsername, "stepInputUsername");
     } else {
-      self.callStack.splice(0, 0, self.stepCheckPassword);
+      self.enqueueNextItem(self.stepCheckPassword, "stepCheckPassword");
     }
 
-    setTimeout(self.callNextItem.bind(self), 0);
+    self.enqueueNextCall();
   }
 
   stepCheckPassword() {
@@ -263,12 +276,12 @@ class StateMachine {
     }
 
     if (self.isFirstTimePasswordInput(false) || (self.webServicePassword === undefined) || (self.webServicePassword === null)) {
-      self.callStack.splice(0, 0, self.stepInputPassword);
+      self.enqueueNextItem(self.stepInputPassword, "stepInputPassword");
     } else {
-      self.callStack.splice(0, 0, self.stepEnumerateDocumentLayers);
+      self.enqueueNextItem(self.stepEnumerateDocumentLayers, "stepEnumerateDocumentLayers");
     }
 
-    setTimeout(self.callNextItem.bind(self), 0);
+    self.enqueueNextCall();
   }
 
   stepInputEndpoint() {
@@ -286,10 +299,10 @@ class StateMachine {
         } else {
           self.webServiceEndpoint = value;
           settings.setDocumentSettingForKey(self.document, "webservice-endpoint", self.webServiceEndpoint);
-          self.callStack.splice(0, 0, self.stepCheckEndpoint);
+          self.enqueueNextItem(self.stepCheckEndpoint, "stepCheckEndpoint");
         }
 
-        setTimeout(self.callNextItem.bind(self), 0);
+        self.enqueueNextCall();
       }
     );
   }
@@ -309,10 +322,10 @@ class StateMachine {
         } else {
           self.webServiceUsername = value;
           settings.setDocumentSettingForKey(self.document, "webservice-username", self.webServiceUsername);
-          self.callStack.splice(0, 0, self.stepCheckUsername);
+          self.enqueueNextItem(self.stepCheckUsername, "stepCheckUsername");
         }
 
-        setTimeout(self.callNextItem.bind(self), 0);
+        self.enqueueNextCall();
       }
     );
   }
@@ -332,10 +345,10 @@ class StateMachine {
         } else {
           self.webServicePassword = value;
           settings.setDocumentSettingForKey(self.document, "webservice-password", self.webServicePassword);
-          self.callStack.splice(0, 0, self.stepCheckPassword);
+          self.enqueueNextItem(self.stepCheckPassword, "stepCheckPassword");
         }
 
-        setTimeout(self.callNextItem.bind(self), 0);
+        self.enqueueNextCall();
       }
     );
   }
@@ -344,21 +357,21 @@ class StateMachine {
     var self = this;
 
     self.isFirstTimeEndpointInput(true);
-    setTimeout(self.callNextItem.bind(self), 0);
+    self.enqueueNextCall();
   }
 
   stepReAskUsername() {
     var self = this;
 
     self.isFirstTimeUsernameInput(true);
-    setTimeout(self.callNextItem.bind(self), 0);
+    self.enqueueNextCall();
   }
 
   stepReAskPassword() {
     var self = this;
 
     self.isFirstTimePasswordInput(true);
-    setTimeout(self.callNextItem.bind(self), 0);
+    self.enqueueNextCall();
   }
 
   stepEnumerateLayers() {
@@ -368,6 +381,12 @@ class StateMachine {
     var parentLayers = item[1];
 
     if ((layer.type != "Page") || (layer.name != "Assets")) {
+      if (layer.type == "Artboard") {
+        self.artboardCounter++;
+      }
+
+      self.layerCounter++;
+
       if (
         (layer.type == "Page") ||
         (layer.type == "Artboard") ||
@@ -377,7 +396,7 @@ class StateMachine {
         (layer.type == "Image") ||
         (layer.type == "Text") ||
         (layer.type == "Shape") ||
-        // (layer.type == "ShapePath") ||
+        (layer.type == "ShapePath") ||
         false) {
         self.objectCounter++;
 
@@ -436,14 +455,14 @@ class StateMachine {
     }
 
     if (self.layerFilterQueue.length > 0) {
-      self.callStack.splice(0, 0, self.stepEnumerateLayers);
-      setTimeout(self.callNextItem.bind(self), 0);
+      self.enqueueNextItem(self.stepEnumerateLayers, "stepEnumerateLayers");
+      self.enqueueNextCall();
     } else if (self.layerUploadQueue.length > 0) {
-      self.callStack.splice(0, 0, self.stepGetLayerCsrfToken);
-      setTimeout(self.callNextItem.bind(self), 0);
+      self.enqueueNextItem(self.stepGetLayerCsrfToken, "stepGetLayerCsrfToken");
+      self.enqueueNextCall();
     } else {
-      self.callStack.splice(0, 0, self.stepReportSuccess);
-      setTimeout(self.callNextItem.bind(self), 0);
+      self.enqueueNextItem(self.stepReportSuccess, "stepReportSuccess");
+      self.enqueueNextCall();
     }
   }
 
@@ -472,8 +491,8 @@ class StateMachine {
       "overrides": []
     });
 
-    self.callStack.splice(0, 0, self.stepEnumerateLayers);
-    setTimeout(self.callNextItem.bind(self), 0);
+    self.enqueueNextItem(self.stepEnumerateLayers, "stepEnumerateLayers");
+    self.enqueueNextCall();
   }
 
   stepEnumerateImages() {
@@ -490,7 +509,7 @@ class StateMachine {
         (layer.type == "Image") ||
         (layer.type == "Text") ||
         (layer.type == "Shape") ||
-        // (layer.type == "ShapePath") ||
+        (layer.type == "ShapePath") ||
         false) {
         self.objectCounter++;
 
@@ -575,19 +594,19 @@ class StateMachine {
     }
 
     if (self.imageFilterQueue.length > 0) {
-      self.callStack.splice(0, 0, self.stepEnumerateImages);
-      setTimeout(self.callNextItem.bind(self), 0);
+      self.enqueueNextItem(self.stepEnumerateImages, "stepEnumerateImages");
+      self.enqueueNextCall();
     } else {
       self.cumulativeImageUpload = [];
       self.cumulativeImageUploadSize = 0;
       self.imageUploadQueue.push({"images": self.cumulativeImageUpload});
 
       if (self.imageUploadQueue.length > 0) {
-        self.callStack.splice(0, 0, self.stepGetImageCsrfToken);
-        setTimeout(self.callNextItem.bind(self), 0);
+        self.enqueueNextItem(self.stepGetImageCsrfToken, "stepGetImageCsrfToken");
+        self.enqueueNextCall();
       } else {
-        self.callStack.splice(0, 0, self.stepGetActionCsrfToken);
-        setTimeout(self.callNextItem.bind(self), 0);
+        self.enqueueNextItem(self.stepGetActionCsrfToken, "stepGetActionCsrfToken");
+        self.enqueueNextCall();
       }
     }
   }
@@ -601,11 +620,11 @@ class StateMachine {
       }
     );
 
-    self.callStack.splice(0, 0, self.stepEnumerateImages);
-    setTimeout(self.callNextItem.bind(self), 0);
+    self.enqueueNextItem(self.stepEnumerateImages, "stepEnumerateImages");
+    self.enqueueNextCall();
   }
 
-  utilGetCsrfToken(nextItem) {
+  utilGetCsrfToken(nextItem, nextName) {
     var self = this;
     var csrfTokenPattern = /csrftoken=([A-Za-z0-9]+)/s;
 
@@ -622,7 +641,7 @@ class StateMachine {
 
         if (setCookieHeader !== undefined) {
           self.webServiceToken  = csrfTokenPattern.exec(setCookieHeader)[1];
-          self.callStack.splice(0, 0, nextItem);
+          self.enqueueNextItem(nextItem, nextName);
         } else {
           self.hasError         = true;
           self.errorTitle       = "HTTP (A01)";
@@ -634,39 +653,39 @@ class StateMachine {
         self.errorTitle         = "HTTP (A02)";
         self.errorDescription   = "Authentication failed.\n" + response.status + ": " + response.statusText;
         self.webServiceToken    = undefined;
-        self.callStack.splice(0, 0, self.stepReAskUsername);
-        self.callStack.splice(0, 0, self.stepReAskPassword);
+        self.enqueueNextItem(self.stepReAskUsername, "stepReAskUsername");
+        self.enqueueNextItem(self.stepReAskUsername, "stepReAskPassword");
       } else {
         self.hasError           = true;
         self.errorTitle         = "HTTP (A03)";
         self.errorDescription   = response.status + ": " + response.statusText;
         self.webServiceToken    = undefined;
-        self.callStack.splice(0, 0, self.stepReAskEndpoint);
-        self.callStack.splice(0, 0, self.stepReAskUsername);
-        self.callStack.splice(0, 0, self.stepReAskPassword);
+        self.enqueueNextItem(self.stepReAskEndpoint, "stepReAskEndpoint");
+        self.enqueueNextItem(self.stepReAskUsername, "stepReAskUsername");
+        self.enqueueNextItem(self.stepReAskPassword, "stepReAskPassword");
       }
 
-      setTimeout(self.callNextItem.bind(self), 0);
+      self.enqueueNextCall();
     })
     .catch(function(error) {
       self.hasError           = true;
       self.errorTitle         = "HTTP (A04)";
       self.errorDescription   = self.formatError(error);
       self.webServiceToken    = undefined;
-      setTimeout(self.callNextItem.bind(self), 0);
+      self.enqueueNextCall();
     });
   }
 
   stepGetLayerCsrfToken() {
-    this.utilGetCsrfToken(this.stepUploadLayer);
+    this.utilGetCsrfToken(this.stepUploadLayer, "stepUploadLayer");
   }
 
   stepGetImageCsrfToken() {
-    this.utilGetCsrfToken(this.stepUploadImage);
+    this.utilGetCsrfToken(this.stepUploadImage, "stepUploadImage");
   }
 
   stepGetActionCsrfToken() {
-    this.utilGetCsrfToken(this.stepUploadAction);
+    this.utilGetCsrfToken(this.stepUploadAction, "stepUploadAction");
   }
 
   stepUploadLayer() {
@@ -707,23 +726,23 @@ class StateMachine {
               self.errorDescription += "\n" + summaryMatch[1].replace(/<\/?[a-z0-1]+>/sg, "").replace(/\n[ ]+/sg, "");
             }
 
-            setTimeout(self.callNextItem.bind(self), 0);
+            self.enqueueNextCall();
           })
           .catch(function(error) {
             self.hasError           = true;
             self.errorTitle         = "HTTP (B02)";
             self.errorDescription   = self.formatError(error);
 
-            setTimeout(self.callNextItem.bind(self), 0);
+            self.enqueueNextCall();
           });
       } else if (contentType.startsWith("application/json") || contentType.startsWith("text/json")) {
         response.json()
           .then(function(responseJson) {
             if ((response.status >= 200) && (response.status < 300)) {
               if (self.layerUploadQueue.length > 0) {
-                self.callStack.splice(0, 0, self.stepGetLayerCsrfToken);
+                self.enqueueNextItem(self.stepGetLayerCsrfToken, "stepGetLayerCsrfToken");
               } else {
-                self.callStack.splice(0, 0, self.stepEnumerateDocumentImages);
+                self.enqueueNextItem(self.stepEnumerateDocumentImages, "stepEnumerateDocumentImages");
               }
 
               self.totalSize          += Number(responseJson['size']);
@@ -737,14 +756,14 @@ class StateMachine {
               self.errorDescription   = response.status + ": " + response.statusText;
             }
 
-            setTimeout(self.callNextItem.bind(self), 0);
+            self.enqueueNextCall();
           })
           .catch(function(error) {
             self.hasError           = true;
             self.errorTitle         = "HTTP (B04)";
             self.errorDescription   = self.formatError(error);
 
-            setTimeout(self.callNextItem.bind(self), 0);
+            self.enqueueNextCall();
           });
       } else {
         self.hasError           = true;
@@ -757,7 +776,7 @@ class StateMachine {
       self.errorTitle         = "HTTP (B06)";
       self.errorDescription   = self.formatError(error);
 
-      setTimeout(self.callNextItem.bind(self), 0);
+      self.enqueueNextCall();
     });
   }
 
@@ -799,23 +818,23 @@ class StateMachine {
               self.errorDescription += "\n" + summaryMatch[1].replace(/<\/?[a-z0-1]+>/sg, "").replace(/\n[ ]+/sg, "");
             }
 
-            setTimeout(self.callNextItem.bind(self), 0);
+            self.enqueueNextCall();
           })
           .catch(function(error) {
             self.hasError           = true;
             self.errorTitle         = "HTTP (C02)";
             self.errorDescription   = self.formatError(error);
 
-            setTimeout(self.callNextItem.bind(self), 0);
+            self.enqueueNextCall();
           });
       } else if (contentType.startsWith("application/json") || contentType.startsWith("text/json")) {
         response.json()
           .then(function(responseJson) {
             if ((response.status >= 200) && (response.status < 300)) {
               if (self.imageUploadQueue.length > 0) {
-                self.callStack.splice(0, 0, self.stepGetImageCsrfToken);
+                self.enqueueNextItem(self.stepGetImageCsrfToken, "stepGetImageCsrfToken");
               } else {
-                self.callStack.splice(0, 0, self.stepGetActionCsrfToken);
+                self.enqueueNextItem(self.stepGetActionCsrfToken, "stepGetActionCsrfToken");
               }
 
               self.totalSize          += Number(responseJson['size']);
@@ -828,14 +847,14 @@ class StateMachine {
               self.errorDescription   = response.status + ": " + response.statusText;
             }
 
-            setTimeout(self.callNextItem.bind(self), 0);
+            self.enqueueNextCall();
           })
           .catch(function(error) {
             self.hasError           = true;
             self.errorTitle         = "HTTP (C04)";
             self.errorDescription   = self.formatError(error);
 
-            setTimeout(self.callNextItem.bind(self), 0);
+            self.enqueueNextCall();
           });
       } else {
         self.hasError           = true;
@@ -848,7 +867,7 @@ class StateMachine {
       self.errorTitle         = "HTTP (C06)";
       self.errorDescription   = self.formatError(error);
 
-      setTimeout(self.callNextItem.bind(self), 0);
+      self.enqueueNextCall();
     });
   }
 
@@ -893,23 +912,23 @@ class StateMachine {
               self.errorDescription += "\n" + summaryMatch[1].replace(/<\/?[a-z0-1]+>/sg, "").replace(/\n[ ]+/sg, "");
             }
 
-            setTimeout(self.callNextItem.bind(self), 0);
+            self.enqueueNextCall();
           })
           .catch(function(error) {
             self.hasError           = true;
             self.errorTitle         = "HTTP (D02)";
             self.errorDescription   = self.formatError(error);
 
-            setTimeout(self.callNextItem.bind(self), 0);
+            self.enqueueNextCall();
           });
       } else if (contentType.startsWith("application/json") || contentType.startsWith("text/json")) {
         response.json()
           .then(function(responseJson) {
             if ((response.status >= 200) && (response.status < 300)) {
               if (self.imageUploadQueue.length > 0) {
-                self.callStack.splice(0, 0, self.stepGetImageCsrfToken);
+                self.enqueueNextItem(self.stepGetImageCsrfToken, "stepGetImageCsrfToken");
               } else {
-                self.callStack.splice(0, 0, self.stepReportSuccess);
+                self.enqueueNextItem(self.stepReportSuccess, "stepReportSuccess");
               }
 
               self.totalSize          += Number(responseJson['size']);
@@ -922,14 +941,14 @@ class StateMachine {
               self.errorDescription   = response.status + ": " + response.statusText;
             }
 
-            setTimeout(self.callNextItem.bind(self), 0);
+            self.enqueueNextCall();
           })
           .catch(function(error) {
             self.hasError           = true;
             self.errorTitle         = "HTTP (D04)";
             self.errorDescription   = self.formatError(error);
 
-            setTimeout(self.callNextItem.bind(self), 0);
+            self.enqueueNextCall();
           });
       } else {
         self.hasError           = true;
@@ -942,7 +961,7 @@ class StateMachine {
       self.errorTitle         = "HTTP (D06)";
       self.errorDescription   = self.formatError(error);
 
-      setTimeout(self.callNextItem.bind(self), 0);
+      self.enqueueNextCall();
     });
   }
 
@@ -957,7 +976,7 @@ class StateMachine {
       " * " + self.totalCreateCounter + " objects created.\n" +
       " * " + self.totalUpdateCounter + " objects updated.\n" +
       " * " + self.totalDeleteCounter + " objects deleted.\n" +
-      Math.round((Date.now() - self.timeFrom) / 1000) + " seconds spent.");
+      Math.round((Date.now() - self.totalTimeFrom) / 1000) + " seconds spent.");
   }
 }
 
@@ -973,5 +992,6 @@ export default function() {
 
   var stateMachine = new StateMachine(document);
 
-  setTimeout(stateMachine.stepStart.bind(stateMachine), 0);
+  stateMachine.enqueueNextItem(stateMachine.stepStart, "stepStart");
+  stateMachine.enqueueNextCall();
 }
