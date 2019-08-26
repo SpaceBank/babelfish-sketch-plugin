@@ -1,5 +1,6 @@
-import settings from "sketch/settings"
 import sketch   from "sketch"
+import dom      from "sketch/dom"
+import settings from "sketch/settings"
 import ui       from "sketch/ui"
 
 
@@ -25,6 +26,7 @@ class StateMachine {
     this.errorTitle               = undefined;
     this.errorDescription         = undefined;
 
+    this.callItem           = null;
     this.webServiceEndpoint = undefined;
     this.webServiceUsername = undefined;
     this.webServicePassword = undefined;
@@ -46,38 +48,26 @@ class StateMachine {
     this.totalUpdateCounter = 0;
     this.totalDeleteCounter = 0;
 
-    this.prevCallItem           = null;
     this.prevWebServiceEndpoint = undefined;
     this.prevWebServiceUsername = undefined;
     this.prevWebServicePassword = undefined;
     this.prevWebServiceToken    = undefined;
 
-    this.prevArtboardCounter        = 0;
-    this.prevLayerCounter           = 0;
-    this.prevLayerFilterQueueLength = 0;
-    this.prevLayerUploadQueueLength = 0;
-    this.prevImageCounter           = 0;
-    this.prevImageFilterQueueLength = 0;
-    this.prevImageUploadQueueLength = 0;
-
-    this.prevTotalSize          = 0;
-    this.prevTotalCreateCounter = 0;
-    this.prevTotalUpdateCounter = 0;
-    this.prevTotalDeleteCounter = 0;
-
     this.totalTimeFrom = Date.now();
     this.stepTimeFrom = null;
+
+    this.showIsRunning = false;
   }
 
   formatSize(byteNumber) {
-    if (byteNumber < 1024) {
+    if        (byteNumber <               1024) {
       return byteNumber + " bytes";
-    } else if (byteNumber < 2 * 1024 * 1024) {
-      return (Math.round(10 * byteNumber / 1024.0) / 10.0) + " Kb";
-    } else if (byteNumber < 2 * 1024 * 1024 * 1024) {
-      return (Math.round(10 * byteNumber / (1024.0 * 1024.0)) / 10.0) + " Mb";
+    } else if (byteNumber <        1024 * 1024) {
+      return (Math.round(100.0 * byteNumber / (                  1024.0)) / 100.0) + " Kb";
+    } else if (byteNumber < 1024 * 1024 * 1024) {
+      return (Math.round(100.0 * byteNumber / (         1024.0 * 1024.0)) / 100.0) + " Mb";
     } else {
-      return (Math.round(10 * byteNumber / (1024.0 * 1024.0 * 1024.0)) / 10.0) + " Gb";
+      return (Math.round(100.0 * byteNumber / (1024.0 * 1024.0 * 1024.0)) / 100.0) + " Gb";
     }
   }
 
@@ -123,13 +113,92 @@ class StateMachine {
   }
 
   enqueueNextCall() {
-    setTimeout(this.callNextItem.bind(this), 1);
+    setTimeout(this.callNextItem.bind(this), 0);
+  }
+
+  showNextItem() {
+    var self = this;
+    var now = Date.now();
+    var totalElapsed = Math.round((now - this.totalTimeFrom) / 1000);
+    var message = "";
+
+    if (totalElapsed == 1) {
+      message += totalElapsed + " second elapsed so far.";
+    } else {
+      message += totalElapsed + " seconds elapsed so far.";
+    }
+
+    if (self.totalSize > 0) {
+      message += " " + this.formatSize(self.totalSize) + " uploaded so far.";
+    }
+
+    if (self.callItem != null) {
+      switch (self.callItem[1]) {
+        case "stepCheckEndpoint":
+          message += " Checking endpoint address.";
+          break;
+        case "stepCheckPassword":
+          message += " Checking password value.";
+          break;
+        case "stepCheckUsername":
+          message += " Checking username value.";
+          break;
+        case "stepEnumerateDocumentImages":
+        case "stepEnumerateImages":
+          message += " Enumerating images. " + self.imageCounter + " changed images found so far.";
+          break;
+        case "stepEnumerateDocumentLayers":
+        case "stepEnumerateLayers":
+          message += " Enumerating layers. " + self.artboardCounter + " artboards and " + self.layerCounter + " layers found so far.";
+          break;
+        case "stepGetActionCsrfToken":
+        case "stepUploadAction":
+          message += " Postprocessing uploaded data.";
+          break;
+        case "stepGetImageCsrfToken":
+        case "stepUploadImage":
+          message += " Uploading images. " + self.imageUploadQueue.length + " batches left.";
+          break;
+        case "stepGetLayerCsrfToken":
+        case "stepUploadLayer":
+          message += " Uploading layers.";
+          break;
+        case "stepInputEndpoint":
+          message += " Waiting for endpoint address.";
+          break;
+        case "stepInputPassword":
+          message += " Waiting for password value.";
+          break;
+        case "stepInputUsername":
+          message += " Waiting for username value.";
+          break;
+        case "stepReAskEndpoint":
+        case "stepReAskPassword":
+        case "stepReAskUsername":
+          break;
+        case "stepReportSuccess":
+          message += " Success.";
+          break;
+        case "stepStart":
+          message += " Start.";
+          break;
+      }
+
+      //console.log(message);
+      ui.message(message);
+    }
+
+    if (self.showIsRunning) {
+      setTimeout(self.showNextItem.bind(self), 500);
+    } else {
+      console.log(new Date(now).toISOString() + "; STOP");
+    }
   }
 
   callNextItem() {
     var self = this;
 
-    if (self.prevCallItem != null) {
+    if (self.callItem != null) {
       var stepDuration = (Date.now() - self.stepTimeFrom);
 
       if (self.prevWebServiceEndpoint != self.webServiceEndpoint) {
@@ -152,56 +221,8 @@ class StateMachine {
         self.prevWebServiceToken = self.webServiceToken;
       }
 
-      if (self.prevArtboardCounter < self.artboardCounter) {
-        ui.message(self.artboardCounter + " artboards found (" + self.layerCounter + " layers).");
-
-        self.prevArtboardCounter = self.artboardCounter;
-        self.prevLayerCounter = self.layerCounter;
-      }
-
-      if (self.prevImageCounter < self.imageCounter) {
-        if (self.imageCounter % 10 == 0) {
-          ui.message(self.imageCounter + " images found.");
-        }
-
-        self.prevImageCounter = self.imageCounter;
-      }
-
-      if (self.prevLayerUploadQueueLength != self.layerUploadQueue.length) {
-        console.log("    LayerUploadQueueLength = " + self.layerUploadQueue.length + "; // was " + self.prevLayerUploadQueueLength + ".");
-        self.prevLayerUploadQueueLength = self.layerUploadQueue.length;
-      }
-
-      if (self.prevImageUploadQueueLength != self.imageUploadQueue.length) {
-        console.log("    ImageUploadQueueLength = " + self.imageUploadQueue.length + "; // was " + self.prevImageUploadQueueLength + ".");
-        self.prevImageUploadQueueLength = self.imageUploadQueue.length;
-      }
-
-      if (self.prevTotalSize != self.totalSize) {
-        console.log("    TotalSize = " + self.totalSize + "; // was " + self.prevTotalSize + ".");
-
-        ui.message(this.formatSize(self.totalSize - self.prevTotalSize) + " chunk uploaded (" + this.formatSize(self.totalSize) + " total).");
-
-        self.prevTotalSize = self.totalSize;
-      }
-
-      if (self.prevTotalCreateCounter != self.totalCreateCounter) {
-        console.log("    TotalCreateCounter = " + self.totalCreateCounter + "; // was " + self.prevTotalCreateCounter + ".");
-        self.prevTotalCreateCounter = self.totalCreateCounter;
-      }
-
-      if (self.prevTotalUpdateCounter != self.totalUpdateCounter) {
-        console.log("    TotalUpdateCounter = " + self.totalUpdateCounter + "; // was " + self.prevTotalUpdateCounter + ".");
-        self.prevTotalUpdateCounter = self.totalUpdateCounter;
-      }
-
-      if (self.prevTotalDeleteCounter != self.totalDeleteCounter) {
-        console.log("    TotalDeleteCounter = " + self.totalDeleteCounter + "; // was " + self.prevTotalDeleteCounter + ".");
-        self.prevTotalDeleteCounter = self.totalDeleteCounter;
-      }
-
-      if ((self.prevCallItem[1] != 'stepEnumerateLayers') && (self.prevCallItem[1] != 'stepEnumerateImages')) {
-        console.log('} // ' + self.prevCallItem[1] + "; " + stepDuration + "ms; " + new Date(Date.now()).toISOString());
+      if ((self.callItem[1] != "stepEnumerateLayers") && (self.callItem[1] != "stepEnumerateImages")) {
+        console.log("} //"  + self.callItem[1] + "; " + stepDuration + "ms; " + new Date(Date.now()).toISOString());
       }
     }
 
@@ -212,20 +233,23 @@ class StateMachine {
     }
 
     if (self.callStack.length > 0) {
-      var item = self.callStack.pop();
-
-      self.prevCallItem = item;
+      self.callItem = self.callStack.pop();
       self.stepTimeFrom = Date.now();
 
-      setTimeout(item[0], 1);
+      setTimeout(self.callItem[0], 0);
 
-      if ((self.prevCallItem[1] != 'stepEnumerateLayers') && (self.prevCallItem[1] != 'stepEnumerateImages')) {
-        if (self.prevCallItem[1] == "stepReportSuccess") {
-          console.log(self.prevCallItem[1] + " { } // " + new Date(Date.now()).toISOString());
+      if ((self.callItem[1] != "stepEnumerateLayers") && (self.callItem[1] != "stepEnumerateImages")) {
+        if (self.callItem[1] == "stepReportSuccess") {
+          self.showIsRunning = false;
+          console.log(self.callItem[1] + " { } // " + new Date(Date.now()).toISOString());
         } else {
-          console.log(self.prevCallItem[1] + " { // " + new Date(Date.now()).toISOString());
+          self.showIsRunning = true;
+          console.log(self.callItem[1] + " { // " + new Date(Date.now()).toISOString());
         }
       }
+    } else {
+      self.showIsRunning = false;
+      self.callItem = null;
     }
   }
 
@@ -381,43 +405,30 @@ class StateMachine {
     var parentLayers = item[1];
 
     if ((layer.type != "Page") || (layer.name != "Assets")) {
-      if (layer.type == "Artboard") {
-        self.artboardCounter++;
-      }
-
-      self.layerCounter++;
-
       if (
         (layer.type == "Page") ||
         (layer.type == "Artboard") ||
         (layer.type == "SymbolMaster") ||
         (layer.type == "SymbolInstance") ||
         (layer.type == "Group") ||
-        (layer.type == "Image") ||
+        // (layer.type == "Image") ||
         (layer.type == "Text") ||
         (layer.type == "Shape") ||
-        (layer.type == "ShapePath") ||
+        // (layer.type == "ShapePath") ||
         false) {
-        self.objectCounter++;
+        self.layerCounter++;
 
-        var rect = null;
+        if (layer.type == "Artboard") {
+          self.artboardCounter++;
+        }
+
+        var uuid = assignmentBugWorkaround(layer.id);
         var masterUuid = null;
-        var childLayers = [];
-
-        if (layer.frame !== undefined) {
-          rect = { "x": layer.frame.x, "y": layer.frame.y, "w": layer.frame.width, "h": layer.frame.height };
-        }
-
-        if (layer.layers !== undefined) {
-          layer.layers.forEach(
-            function(l, i) {
-              self.layerFilterQueue.push([l, childLayers]);
-            }
-          );
-        }
-
+        var masterLibraryName = null;
+        var masterLibraryType = null;
+        var masterLibraryValid = false;
+        var masterLibraryEnabled = false;
         var overrides = [];
-        var text = null;
 
         if (layer.type == "SymbolInstance") {
           layer.overrides.forEach(function(o, i) {
@@ -429,25 +440,81 @@ class StateMachine {
             }
           });
 
-          masterUuid = assignmentBugWorkaround(layer.master.id);
+          var master = layer.master;
+
+          if (master != null) {
+            masterUuid = assignmentBugWorkaround(master.id);
+
+            var library = master.getLibrary();
+
+            if (library != null) {
+              masterLibraryName    = library.name;
+              masterLibraryType    = library.type;
+              masterLibraryValid   = library.valid;
+              masterLibraryEnabled = library.enabled;
+            }
+          }
         }
+
+        if (layer.type == "SymbolMaster") {
+          var library = layer.getLibrary();
+
+          if (library != null) {
+            masterLibraryName    = library.name;
+            masterLibraryType    = library.type;
+            masterLibraryValid   = library.valid;
+            masterLibraryEnabled = library.enabled;
+          } else {
+            masterLibraryType    = "Local";
+            masterLibraryValid   = true;
+            masterLibraryEnabled = true;
+          }
+        }
+
+        var targetUuid = null;
+
+        if (layer.flow !== undefined) {
+          if (layer.flow.targetId == dom.Flow.BackTarget) {
+            targetUuid = "00000000-0000-0000-0000-000000000000";
+          } else {
+            targetUuid = layer.flow.targetId;
+          }
+        }
+
+        var text = null;
 
         if (layer.type == "Text") {
           text = layer.text;
         }
 
-        var uuid = assignmentBugWorkaround(layer.id); 
+        var rect = null;
+
+        if (layer.frame !== undefined) {
+          rect = { "x": layer.frame.x, "y": layer.frame.y, "w": layer.frame.width, "h": layer.frame.height };
+        }
+
+        var childLayers = [];
+
+        if (layer.layers !== undefined) {
+          layer.layers.forEach(
+            function(l, i) {
+              self.layerFilterQueue.push([l, childLayers]);
+            }
+          );
+        }
 
         parentLayers.push({
           "uuid": uuid,
           "type": layer.type,
           "name": layer.name,
           "master_uuid": masterUuid,
-          "target_uuid": null,
+          "master_library_name":    masterLibraryName,
+          "master_library_type":    masterLibraryType,
+          "master_library_valid":   masterLibraryValid,
+          "master_library_enabled": masterLibraryEnabled,
+          "target_uuid": targetUuid,
           "text": text,
           "rect": rect,
-          "png_image": null,
-          "svg_image": null,
           "layers": childLayers,
           "overrides": overrides
         });
@@ -483,10 +550,13 @@ class StateMachine {
       "type": self.document.type,
       "name": self.document.path === undefined ? "Document Is Not Saved" : self.document.path,
       "master_uuid": null,
+      "master_library_name": null,
+      "master_library_type": null,
+      "master_library_valid": false,
+      "master_library_enabled": false,
       "target_uuid": null,
+      "text": null,
       "rect": null,
-      "png_image": null,
-      "svg_image": null,
       "layers": documentLayers,
       "overrides": []
     });
@@ -506,13 +576,11 @@ class StateMachine {
         (layer.type == "SymbolMaster") ||
         (layer.type == "SymbolInstance") ||
         (layer.type == "Group") ||
-        (layer.type == "Image") ||
+        // (layer.type == "Image") ||
         (layer.type == "Text") ||
         (layer.type == "Shape") ||
-        (layer.type == "ShapePath") ||
+        // (layer.type == "ShapePath") ||
         false) {
-        self.objectCounter++;
-
         if (layer.layers !== undefined) {
           layer.layers.forEach(
             function(l, i) {
@@ -526,7 +594,7 @@ class StateMachine {
           var imageStats = self.imageStats[uuid];
 
           if (imageStats === undefined) {
-            imageStats = {'png_image_size': -1};
+            imageStats = {"png_image_size": -1};
           }
 
           const pngOptions = { formats: "png", output: false };
@@ -534,7 +602,7 @@ class StateMachine {
 
           var pngImage = base64.encodeBin(pngBuffer);
 
-          if (pngBuffer.length != imageStats['png_image_size']) {
+          if (pngBuffer.length != imageStats["png_image_size"]) {
             if (self.cumulativeImageUploadSize > 1024 * 1024) {
               self.cumulativeImageUpload = [];
               self.cumulativeImageUploadSize = 0;
@@ -557,7 +625,7 @@ class StateMachine {
           var imageStats = self.imageStats[uuid];
 
           if (imageStats === undefined) {
-            imageStats = {'svg_image_size': -1, 'png_image_size': -1};
+            imageStats = {"svg_image_size": -1, "png_image_size": -1};
           }
 
           const svgOptions = { formats: "svg", output: false };
@@ -565,13 +633,13 @@ class StateMachine {
 
           var svgImage = base64.encodeBin(svgBuffer);
 
-          if (svgBuffer.length != imageStats['svg_image_size']) {
+          if (svgBuffer.length != imageStats["svg_image_size"]) {
             const pngOptions = { formats: "png", output: false };
             const pngBuffer = sketch.export(layer, pngOptions);
 
             var pngImage = base64.encodeBin(pngBuffer);
 
-            if (pngBuffer.length != imageStats['png_image_size']) {
+            if (pngBuffer.length != imageStats["png_image_size"]) {
               if (self.cumulativeImageUploadSize > 1024 * 1024) {
                 self.cumulativeImageUpload = [];
                 self.cumulativeImageUploadSize = 0;
@@ -588,7 +656,7 @@ class StateMachine {
               self.cumulativeImageUploadSize += pngImage.length;
               self.cumulativeImageUploadSize += svgImage.length;
             }
-          } 
+          }
         }
       }
     }
@@ -654,7 +722,7 @@ class StateMachine {
         self.errorDescription   = "Authentication failed.\n" + response.status + ": " + response.statusText;
         self.webServiceToken    = undefined;
         self.enqueueNextItem(self.stepReAskUsername, "stepReAskUsername");
-        self.enqueueNextItem(self.stepReAskUsername, "stepReAskPassword");
+        self.enqueueNextItem(self.stepReAskPassword, "stepReAskPassword");
       } else {
         self.hasError           = true;
         self.errorTitle         = "HTTP (A03)";
@@ -745,11 +813,11 @@ class StateMachine {
                 self.enqueueNextItem(self.stepEnumerateDocumentImages, "stepEnumerateDocumentImages");
               }
 
-              self.totalSize          += Number(responseJson['size']);
-              self.totalCreateCounter += Number(responseJson['create_counter']);
-              self.totalUpdateCounter += Number(responseJson['update_counter']);
-              self.totalDeleteCounter += Number(responseJson['delete_counter']);
-              self.imageStats         = responseJson['image_stats'];
+              self.totalSize          += Number(responseJson["size"]);
+              self.totalCreateCounter += Number(responseJson["create_counter"]);
+              self.totalUpdateCounter += Number(responseJson["update_counter"]);
+              self.totalDeleteCounter += Number(responseJson["delete_counter"]);
+              self.imageStats         = responseJson["image_stats"];
             } else {
               self.hasError           = true;
               self.errorTitle         = "HTTP (B03)";
@@ -837,10 +905,10 @@ class StateMachine {
                 self.enqueueNextItem(self.stepGetActionCsrfToken, "stepGetActionCsrfToken");
               }
 
-              self.totalSize          += Number(responseJson['size']);
-              self.totalCreateCounter += Number(responseJson['create_counter']);
-              self.totalUpdateCounter += Number(responseJson['update_counter']);
-              self.totalDeleteCounter += Number(responseJson['delete_counter']);
+              self.totalSize          += Number(responseJson["size"]);
+              self.totalCreateCounter += Number(responseJson["create_counter"]);
+              self.totalUpdateCounter += Number(responseJson["update_counter"]);
+              self.totalDeleteCounter += Number(responseJson["delete_counter"]);
             } else {
               self.hasError           = true;
               self.errorTitle         = "HTTP (C03)";
@@ -931,10 +999,10 @@ class StateMachine {
                 self.enqueueNextItem(self.stepReportSuccess, "stepReportSuccess");
               }
 
-              self.totalSize          += Number(responseJson['size']);
-              self.totalCreateCounter += Number(responseJson['create_counter']);
-              self.totalUpdateCounter += Number(responseJson['update_counter']);
-              self.totalDeleteCounter += Number(responseJson['delete_counter']);
+              self.totalSize          += Number(responseJson["size"]);
+              self.totalCreateCounter += Number(responseJson["create_counter"]);
+              self.totalUpdateCounter += Number(responseJson["update_counter"]);
+              self.totalDeleteCounter += Number(responseJson["delete_counter"]);
             } else {
               self.hasError           = true;
               self.errorTitle         = "HTTP (D03)";
@@ -994,4 +1062,6 @@ export default function() {
 
   stateMachine.enqueueNextItem(stateMachine.stepStart, "stepStart");
   stateMachine.enqueueNextCall();
+  stateMachine.showIsRunning = true;
+  stateMachine.showNextItem();
 }
