@@ -1,36 +1,340 @@
-import sketch   from "sketch"
-import dom      from "sketch/dom"
-import settings from "sketch/settings"
-import ui       from "sketch/ui"
+import sketch from "sketch"
+import dom    from "sketch/dom"
+import ui     from "sketch/ui"
 
 
-const fetch      = require("sketch-polyfill-fetch");
-const base64     = require("./base64.js");
+const fetch  = require("sketch-polyfill-fetch");
+const base64 = require("./base64.js");
+const settingsManager = require("./settingsmanager.js");
 
 
-function assignmentBugWorkaround(buggyValue) {
-  return buggyValue;
+function assignmentBugWorkaround(buggyValue) {return buggyValue; }
+
+
+function emptyAction() {}
+
+
+class TabPage {
+  createPopupField(labelText, initialValue, allValues) {
+    var popupLabel = NSTextField.alloc().initWithFrame(
+      NSMakeRect(
+        this.marginLabelLeft,
+        this.currentY - (this.labelHeight + this.marginLabelTop),
+        this.labelWidth,
+        this.labelHeight
+      )
+    );
+
+    popupLabel.setStringValue(labelText);
+    popupLabel.setBezeled(false);
+    popupLabel.setDrawsBackground(false);
+    popupLabel.setEditable(false);
+    popupLabel.setSelectable(false);
+
+    var popupField = NSPopUpButton.alloc().initWithFrame(
+      NSMakeRect(
+        this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginPopupLeft,
+        this.currentY - (this.fieldHeight + this.marginPopupTop),
+        this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginPopupLeft + this.marginPopupRight),
+        this.labelHeight
+      )
+    );
+
+    var isSelected = false;
+
+    for (var index = 0; index < allValues.length; index++) {
+      popupField.addItemWithTitle(allValues[index]);
+
+      if (allValues[index] == initialValue) {
+        popupField.selectItemAtIndex(index);
+        isSelected = true;
+      }
+    }
+
+    if (!isSelected) {
+      popupField.selectItemAtIndex(0);
+    }
+
+    this.tabItemView.addSubview(popupLabel);
+    this.tabItemView.addSubview(popupField);
+
+    this.currentY -= (this.fieldHeight + this.spacingH);
+
+    return popupField;
+  }
+
+  createTextField(labelText, initialValue) {
+    var textLabel = NSTextField.alloc().initWithFrame(
+      NSMakeRect(
+        this.marginLabelLeft,
+        this.currentY - (this.labelHeight + this.marginLabelTop),
+        this.labelWidth,
+        this.labelHeight
+      )
+    );
+
+    textLabel.setStringValue(labelText);
+    textLabel.setBezeled(false);
+    textLabel.setDrawsBackground(false);
+    textLabel.setEditable(false);
+    textLabel.setSelectable(false);
+    
+    var textField = NSTextField.alloc().initWithFrame(
+      NSMakeRect(
+        this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
+        this.currentY - (this.fieldHeight + this.marginTextTop),
+        this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft + this.marginTextRight),
+        this.labelHeight
+      )
+    );
+
+    textField.setStringValue(initialValue);
+    textField.setBezelStyle(1);
+    
+    this.tabItemView.addSubview(textLabel);
+    this.tabItemView.addSubview(textField);
+
+    this.currentY -= (this.fieldHeight + this.spacingH);
+
+    return textField;
+  }
+
+  createPasswordField(labelText, initialValue) {
+    var passwordLabel = NSTextField.alloc().initWithFrame(
+      NSMakeRect(
+        this.marginLabelLeft,
+        this.currentY - (this.labelHeight + this.marginLabelTop),
+        this.labelWidth,
+        this.labelHeight
+      )
+    );
+
+    passwordLabel.setStringValue(labelText);
+    passwordLabel.setBezeled(false);
+    passwordLabel.setDrawsBackground(false);
+    passwordLabel.setEditable(false);
+    passwordLabel.setSelectable(false);
+    
+    var passwordField = NSSecureTextField.alloc().initWithFrame(
+      NSMakeRect(
+        this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
+        this.currentY - (this.fieldHeight + this.marginPopupTop),
+        this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft + this.marginTextRight),
+        this.labelHeight
+      )
+    );
+
+    passwordField.setStringValue(initialValue);
+    passwordField.setBezelStyle(1);
+    
+    this.tabItemView.addSubview(passwordLabel);
+    this.tabItemView.addSubview(passwordField);
+
+    this.currentY -= (this.fieldHeight + this.spacingH);
+
+    return passwordField;
+  }
+
+  createCheckboxField(labelText, initialValue) {
+    var checkboxField = NSButton.alloc().initWithFrame(
+      NSMakeRect(
+        this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
+        this.currentY - (this.fieldHeight + this.marginPopupTop),
+        this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft + this.marginTextRight),
+        this.labelHeight
+      )
+    );
+
+    checkboxField.setButtonType(3);
+    checkboxField.setState(initialValue);
+    checkboxField.setBezelStyle(1);
+    checkboxField.setTitle(labelText);
+    
+    this.tabItemView.addSubview(checkboxField);
+
+    this.currentY -= (this.fieldHeight + this.spacingH);
+
+    return checkboxField;
+  }
+
+  createRadioFields(labelTexts, initialValue) {
+    var labelTextNumber = labelTexts.length;
+    var boxOuterHeight = 23 + 2 * this.marginPopupTop + labelTextNumber * (this.fieldHeight + this.spacingH);
+    var box = NSBox.alloc().initWithFrame(
+      NSMakeRect(
+        this.marginLabelLeft,
+        this.currentY - (boxOuterHeight + this.marginPopupTop),
+        this.totalW - (this.marginLabelLeft + this.marginLabelRight),
+        boxOuterHeight
+      )
+    );
+
+    box.setTitlePosition(0);
+
+    var boxInnerHeight = box.contentView().frame().size.height;
+    var boxInnerWidth  = box.contentView().frame().size.width;
+
+    var result = [];
+
+    for (var index = 0; index < labelTexts.length; index++) {
+      var radioField = NSButton.alloc().initWithFrame(
+        NSMakeRect(
+          this.marginLabelLeft,
+          boxInnerHeight - ((index + 1) * (this.fieldHeight + this.spacingH) + this.marginPopupTop),
+          boxInnerWidth - (this.marginLabelLeft + this.marginLabelRight),
+          this.labelHeight
+        )
+      );
+
+      radioField.setButtonType(4);
+      radioField.setState(index == initialValue);
+      radioField.setBezelStyle(1);
+      radioField.setTitle(labelTexts[index]);
+      radioField.setCOSJSTargetFunction(emptyAction);
+      
+      box.addSubview(radioField);
+
+      result.push(radioField);
+    }
+
+    this.tabItemView.addSubview(box);
+
+    this.currentY -= (boxOuterHeight + this.spacingH);
+
+    return result;
+  }
+
+  constructor(settingsWindow, labelText) {
+    this.tabItem          = NSTabViewItem.alloc().init();
+    this.tabItemView      = NSView.alloc().init();
+    this.tabItem.label    = labelText;
+    this.tabItem.view     = this.tabItemView;
+    this.labelWidth       = 80;
+    this.labelHeight      = 23;
+    this.fieldHeight      = 23;
+    this.marginLabelLeft  = 10;
+    this.marginLabelRight =  0;
+    this.marginLabelTop   =  2;
+    this.marginTextLeft   =  2;
+    this.marginTextRight  = 10;
+    this.marginTextTop    =  0;
+    this.marginPopupLeft  =  0;
+    this.marginPopupRight =  8;
+    this.marginPopupTop   =  0;
+
+    this.spacingH = 5;
+
+    settingsWindow.tabView.addTabViewItem(this.tabItem);
+
+    if (settingsWindow.tabView.numberOfTabViewItems() == 1) {
+      settingsWindow.tabW = this.tabItemView.frame().size.width;
+      settingsWindow.tabH = this.tabItemView.frame().size.height;
+    }
+
+    this.currentY = settingsWindow.tabH - this.spacingH;
+    this.totalW = settingsWindow.tabW;
+  }
 }
 
 
-function getAuthorizationHeader(username, password) {
-  return "Basic " + base64.encodeStr(username + ":" + password);
+class SettingsWindow {
+  _createChrome() {
+    this.tabView = NSTabView.alloc().initWithFrame(NSMakeRect(0, 0, 640, 480));
+    this.contanerView = NSView.alloc().initWithFrame(this.tabView.frame());
+    this.contanerView.addSubview(this.tabView);
+    this.window = NSAlert.alloc().init();
+    this.window.setMessageText("Settings");
+    this.window.setInformativeText("Space globalization plug-in settings");
+    this.window.setIcon(NSImage.alloc().initByReferencingFile(context.plugin.urlForResourceNamed("logo.png").path()));
+    this.window.addButtonWithTitle("Save");
+    this.window.addButtonWithTitle("Cancel");
+    this.window.accessoryView = this.contanerView;
+  }
+
+  _createTabPage(labelText) {
+    return new TabPage(this, labelText);
+  }
+
+  constructor(settings) {
+    this._settings = settings;
+    this._possibleEndpoints = [
+      "https://globalization.spacebank.xyz/sketch/update",
+      "https://roman-akopov.code.spacebank.xyz/sketch/update"
+    ];
+    this.endpoint = this._settings.getEndpoint();
+    this.username = this._settings.getUsername();
+    this.password = this._settings.getPassword();
+    this.syncmode = this._settings.getSyncmode();
+
+    this._createChrome();
+    this._pageAccount = this._createTabPage("Account");
+    this._endpointField = this._pageAccount.createPopupField(
+      "Endpoint:",
+      this.endpoint,
+      this._possibleEndpoints
+    );
+    this._usernameField = this._pageAccount.createTextField(
+      "Username:",
+      this.username
+    );
+    this._passwordField = this._pageAccount.createPasswordField(
+      "Password:",
+      this.password
+    );
+    
+    this._pagePreferences = this._createTabPage("Preferences");
+    this._syncmodeFields = this._pagePreferences.createRadioFields(
+      [
+        "Never show settings dialog",
+        "Show settings dialog before first synchronization",
+        "Show settings dialog before each synchronization",
+      ],
+      this.syncmode
+    );
+  }
+
+  run() {
+    var window = this.window;
+    var result = window.runModal();
+
+    if (result == 1000) {
+      this.endpoint = this._possibleEndpoints[this._endpointField.indexOfSelectedItem()];
+      this.username = this._usernameField.stringValue();
+      this.password = this._passwordField.stringValue();
+      this.syncmode = 2;
+
+      for (var index = 0; index < this._syncmodeFields.length; index++) {
+        if (this._syncmodeFields[index].state() == 1) {
+          this.syncmode = index;
+        }
+      }
+
+      this._settings.setEndpoint(this.endpoint);
+      this._settings.setUsername(this.username);
+      this._settings.setPassword(this.password);
+      this._settings.setSyncmode(this.syncmode);
+
+      return true;
+    }
+
+    return false;
+  }
 }
 
 
 class StateMachine {
   constructor(document) {
-    this.document                 = document;
-    this.callStack                = [];
-    this.hasError                 = false;
-    this.errorTitle               = undefined;
-    this.errorDescription         = undefined;
+    this.totalTimeFrom    = Date.now();
 
-    this.callItem           = null;
-    this.webServiceEndpoint = undefined;
-    this.webServiceUsername = undefined;
-    this.webServicePassword = undefined;
-    this.webServiceToken    = undefined;
+    this.document         = document;
+    this.settings         = settingsManager.create(this.document, this.totalTimeFrom);
+    this.callStack        = [];
+    this.hasError         = false;
+    this.errorTitle       = undefined;
+    this.errorDescription = undefined;
+
+    this.callItem        = null;
+    this.webServiceToken = undefined;
 
     this.artboardCounter           = 0;
     this.layerCounter              = 0;
@@ -43,17 +347,14 @@ class StateMachine {
     this.cumulativeImageUploadSize = 1024 * 1024 * 1024;
     this.imageStats                = {};
 
-    this.totalSize          = 0;
+    this.totalDownloadSize  = 0;
+    this.totalUploadSize    = 0;
     this.totalCreateCounter = 0;
     this.totalUpdateCounter = 0;
     this.totalDeleteCounter = 0;
 
-    this.prevWebServiceEndpoint = undefined;
-    this.prevWebServiceUsername = undefined;
-    this.prevWebServicePassword = undefined;
-    this.prevWebServiceToken    = undefined;
+    this.prevWebServiceToken = undefined;
 
-    this.totalTimeFrom = Date.now();
     this.stepTimeFrom = null;
 
     this.showIsRunning = false;
@@ -71,6 +372,13 @@ class StateMachine {
     }
   }
 
+  formatTime(secondNumber) {
+    var minutes = Math.floor(secondNumber / 60);
+    var seconds = secondNumber % 60;
+
+    return ("00" + minutes.toFixed(0)).slice(-2) + ":" + ("00" + seconds.toFixed(0)).slice(-2);
+  }
+
   formatError(error) {
     if (typeof error.localizedDescription === "function") {
       return error.localizedDescription();
@@ -79,33 +387,6 @@ class StateMachine {
     } else {
       return String(error);
     }
-  }
-
-  documentSessionBoolean(prefix, defaultValue, newValue) {
-    var fullName = prefix + assignmentBugWorkaround(this.document.id);
-    var oldValue = settings.sessionVariable(fullName);
-
-    if (newValue !== undefined) {
-      settings.setSessionVariable(fullName, Boolean(newValue));
-    }
-
-    if (oldValue === undefined) {
-      return Boolean(defaultValue);
-    }
-
-    return Boolean(oldValue);
-  }
-
-  isFirstTimeEndpointInput(newValue) {
-    return this.documentSessionBoolean("is-first-time-endpoint-input-", true, newValue);
-  }
-
-  isFirstTimeUsernameInput(newValue) {
-    return this.documentSessionBoolean("is-first-time-username-input-", true, newValue);
-  }
-
-  isFirstTimePasswordInput(newValue) {
-    return this.documentSessionBoolean("is-first-time-password-input-", true, newValue);
   }
 
   enqueueNextItem(func, name) {
@@ -122,26 +403,13 @@ class StateMachine {
     var totalElapsed = Math.round((now - this.totalTimeFrom) / 1000);
     var message = "";
 
-    if (totalElapsed == 1) {
-      message += totalElapsed + " second elapsed so far.";
-    } else {
-      message += totalElapsed + " seconds elapsed so far.";
-    }
-
-    if (self.totalSize > 0) {
-      message += " " + this.formatSize(self.totalSize) + " uploaded so far.";
-    }
+    message += self.formatTime(totalElapsed) + " 🕑";
+    message += " " + this.formatSize(self.totalUploadSize) + " ⇑ " + this.formatSize(self.totalDownloadSize) + " ⇓ |";
 
     if (self.callItem != null) {
       switch (self.callItem[1]) {
-        case "stepCheckEndpoint":
-          message += " Checking endpoint address.";
-          break;
-        case "stepCheckPassword":
-          message += " Checking password value.";
-          break;
-        case "stepCheckUsername":
-          message += " Checking username value.";
+        case "stepCheckSettings":
+          message += " Checking settings.";
           break;
         case "stepEnumerateDocumentImages":
         case "stepEnumerateImages":
@@ -163,18 +431,10 @@ class StateMachine {
         case "stepUploadLayer":
           message += " Uploading layers.";
           break;
-        case "stepInputEndpoint":
-          message += " Waiting for endpoint address.";
+        case "stepInputSettings":
+          message += " Waiting for settings.";
           break;
-        case "stepInputPassword":
-          message += " Waiting for password value.";
-          break;
-        case "stepInputUsername":
-          message += " Waiting for username value.";
-          break;
-        case "stepReAskEndpoint":
-        case "stepReAskPassword":
-        case "stepReAskUsername":
+        case "stepReAskSettings":
           break;
         case "stepReportSuccess":
           message += " Success.";
@@ -184,7 +444,6 @@ class StateMachine {
           break;
       }
 
-      //console.log(message);
       ui.message(message);
     }
 
@@ -200,21 +459,6 @@ class StateMachine {
 
     if (self.callItem != null) {
       var stepDuration = (Date.now() - self.stepTimeFrom);
-
-      if (self.prevWebServiceEndpoint != self.webServiceEndpoint) {
-        console.log("    Endpoint = \"" + self.webServiceEndpoint + "\"; // was \"" + self.prevWebServiceEndpoint + "\".");
-        self.prevWebServiceEndpoint = self.webServiceEndpoint;
-      }
-
-      if (self.prevWebServiceUsername != self.webServiceUsername) {
-        console.log("    Username = \"" + self.webServiceUsername + "\"; // was \"" + self.prevWebServiceUsername + "\".");
-        self.prevWebServiceUsername = self.webServiceUsername;
-      }
-
-      if (self.prevWebServicePassword != self.webServicePassword) {
-        console.log("    Password = \"" + self.webServicePassword + "\"; // was \"" + self.prevWebServicePassword + "\".");
-        self.prevWebServicePassword = self.webServicePassword;
-      }
 
       if (self.prevWebServiceToken != self.webServiceToken) {
         console.log("    Token = \"" + self.webServiceToken + "\"; // was \"" + self.prevWebServiceToken + "\".");
@@ -253,54 +497,22 @@ class StateMachine {
     }
   }
 
+  getAuthorizationHeader() {
+    return "Basic " + base64.encodeStr(this.settings.getUsername() + ":" + this.settings.getPassword());
+  }
+
   stepStart() {
     var self = this;
 
-    self.enqueueNextItem(self.stepCheckEndpoint, "stepCheckEndpoint");
+    self.enqueueNextItem(self.stepCheckSettings, "stepCheckSettings");
     self.enqueueNextCall();
   }
 
-  stepCheckEndpoint() {
+  stepCheckSettings() {
     var self = this;
 
-    if (self.webServiceEndpoint === undefined) {
-      self.webServiceEndpoint = settings.documentSettingForKey(self.document, "webservice-endpoint");
-    }
-
-    if (self.isFirstTimeEndpointInput(false) || (self.webServiceEndpoint === undefined) || (self.webServiceEndpoint === null)) {
-      self.enqueueNextItem(self.stepInputEndpoint, "stepInputEndpoint");
-    } else {
-      self.enqueueNextItem(self.stepCheckUsername, "stepCheckUsername");
-    }
-
-    self.enqueueNextCall();
-  }
-
-  stepCheckUsername() {
-    var self = this;
-
-    if (self.webServiceUsername === undefined) {
-      self.webServiceUsername = settings.documentSettingForKey(self.document, "webservice-username");
-    }
-
-    if (self.isFirstTimeUsernameInput(false) || (self.webServiceUsername === undefined) || (self.webServiceUsername === null)) {
-      self.enqueueNextItem(self.stepInputUsername, "stepInputUsername");
-    } else {
-      self.enqueueNextItem(self.stepCheckPassword, "stepCheckPassword");
-    }
-
-    self.enqueueNextCall();
-  }
-
-  stepCheckPassword() {
-    var self = this;
-
-    if (self.webServicePassword === undefined) {
-      self.webServicePassword = settings.documentSettingForKey(self.document, "webservice-password");
-    }
-
-    if (self.isFirstTimePasswordInput(false) || (self.webServicePassword === undefined) || (self.webServicePassword === null)) {
-      self.enqueueNextItem(self.stepInputPassword, "stepInputPassword");
+    if (self.settings.shouldShowSettings()) {
+      self.enqueueNextItem(self.stepInputSettings, "stepInputSettings");
     } else {
       self.enqueueNextItem(self.stepEnumerateDocumentLayers, "stepEnumerateDocumentLayers");
     }
@@ -308,93 +520,25 @@ class StateMachine {
     self.enqueueNextCall();
   }
 
-  stepInputEndpoint() {
+  stepInputSettings() {
     var self = this;
+    var settingWindow = new SettingsWindow(self.settings);
 
-    ui.getInputFromUser(
-      "Endpoint:",
-      { initialValue: self.webServiceEndpoint, numberOfLines: 3 },
-      (err, value) => {
-        if (err) {
-          self.webServiceEndpoint = undefined;
-          self.hasError           = true;
-          self.errorTitle         = "USER INPUT (A01)";
-          self.errorDescription   = "Endpoint is required.";
-        } else {
-          self.webServiceEndpoint = value;
-          settings.setDocumentSettingForKey(self.document, "webservice-endpoint", self.webServiceEndpoint);
-          self.enqueueNextItem(self.stepCheckEndpoint, "stepCheckEndpoint");
-        }
+    if (settingWindow.run()) {
+      self.enqueueNextItem(self.stepCheckSettings, "stepCheckSettings");
+    } else {
+      self.hasError           = true;
+      self.errorTitle         = "USER INPUT (A01)";
+      self.errorDescription   = "Settings are required.";
+    }
 
-        self.enqueueNextCall();
-      }
-    );
-  }
-
-  stepInputUsername() {
-    var self = this;
-
-    ui.getInputFromUser(
-      "Username:",
-      { initialValue: self.webServiceUsername },
-      (err, value) => {
-        if (err) {
-          self.webServiceUsername = undefined;
-          self.hasError           = true;
-          self.errorTitle         = "USER INPUT (B01)";
-          self.errorDescription   = "Username is required.";
-        } else {
-          self.webServiceUsername = value;
-          settings.setDocumentSettingForKey(self.document, "webservice-username", self.webServiceUsername);
-          self.enqueueNextItem(self.stepCheckUsername, "stepCheckUsername");
-        }
-
-        self.enqueueNextCall();
-      }
-    );
-  }
-
-  stepInputPassword() {
-    var self = this;
-
-    ui.getInputFromUser(
-      "Password:",
-      { initialValue: self.webServicePassword },
-      (err, value) => {
-        if (err) {
-          self.webServicePassword = undefined;
-          self.hasError           = true;
-          self.errorTitle         = "USER INPUT (C01)";
-          self.errorDescription   = "Password is required.";
-        } else {
-          self.webServicePassword = value;
-          settings.setDocumentSettingForKey(self.document, "webservice-password", self.webServicePassword);
-          self.enqueueNextItem(self.stepCheckPassword, "stepCheckPassword");
-        }
-
-        self.enqueueNextCall();
-      }
-    );
-  }
-
-  stepReAskEndpoint() {
-    var self = this;
-
-    self.isFirstTimeEndpointInput(true);
     self.enqueueNextCall();
   }
 
-  stepReAskUsername() {
+  stepReAskSettings() {
     var self = this;
 
-    self.isFirstTimeUsernameInput(true);
-    self.enqueueNextCall();
-  }
-
-  stepReAskPassword() {
-    var self = this;
-
-    self.isFirstTimePasswordInput(true);
+    self.settings.makeShowSettings();
     self.enqueueNextCall();
   }
 
@@ -696,11 +840,11 @@ class StateMachine {
     var self = this;
     var csrfTokenPattern = /csrftoken=([A-Za-z0-9]+)/s;
 
-    fetch(self.webServiceEndpoint,
+    fetch(self.settings.getEndpoint(),
     {
       method: "GET",
       headers: {
-          "Authorization": getAuthorizationHeader(self.webServiceUsername, self.webServicePassword)
+          "Authorization": self.getAuthorizationHeader()
       }
     })
     .then(function(response) {
@@ -721,16 +865,13 @@ class StateMachine {
         self.errorTitle         = "HTTP (A02)";
         self.errorDescription   = "Authentication failed.\n" + response.status + ": " + response.statusText;
         self.webServiceToken    = undefined;
-        self.enqueueNextItem(self.stepReAskUsername, "stepReAskUsername");
-        self.enqueueNextItem(self.stepReAskPassword, "stepReAskPassword");
+        self.enqueueNextItem(self.stepReAskSettings, "stepReAskSettings");
       } else {
         self.hasError           = true;
         self.errorTitle         = "HTTP (A03)";
         self.errorDescription   = response.status + ": " + response.statusText;
         self.webServiceToken    = undefined;
-        self.enqueueNextItem(self.stepReAskEndpoint, "stepReAskEndpoint");
-        self.enqueueNextItem(self.stepReAskUsername, "stepReAskUsername");
-        self.enqueueNextItem(self.stepReAskPassword, "stepReAskPassword");
+        self.enqueueNextItem(self.stepReAskSettings, "stepReAskSettings");
       }
 
       self.enqueueNextCall();
@@ -760,13 +901,13 @@ class StateMachine {
     var self = this;
     var json = self.layerUploadQueue.pop();
 
-    fetch(self.webServiceEndpoint,
+    fetch(self.settings.getEndpoint(),
     {
       method: "PATCH",
       body: json,
       headers: {
           "Cookie": "csrftoken=" + self.webServiceToken,
-          "Authorization": getAuthorizationHeader(self.webServiceUsername, self.webServicePassword),
+          "Authorization": self.getAuthorizationHeader(),
           "Content-Type": "application/json+layers",
           "X-CSRFToken": self.webServiceToken
       }
@@ -813,7 +954,8 @@ class StateMachine {
                 self.enqueueNextItem(self.stepEnumerateDocumentImages, "stepEnumerateDocumentImages");
               }
 
-              self.totalSize          += Number(responseJson["size"]);
+              self.totalUploadSize    += Number(responseJson["size"]);
+              self.totalDownloadSize  += Number(response.headers.get('Content-Length'));
               self.totalCreateCounter += Number(responseJson["create_counter"]);
               self.totalUpdateCounter += Number(responseJson["update_counter"]);
               self.totalDeleteCounter += Number(responseJson["delete_counter"]);
@@ -852,13 +994,13 @@ class StateMachine {
     var self = this;
     var json = self.imageUploadQueue.pop();
 
-    fetch(self.webServiceEndpoint,
+    fetch(self.settings.getEndpoint(),
     {
       method: "PATCH",
       body: json,
       headers: {
           "Cookie": "csrftoken=" + self.webServiceToken,
-          "Authorization": getAuthorizationHeader(self.webServiceUsername, self.webServicePassword),
+          "Authorization": self.getAuthorizationHeader(),
           "Content-Type": "application/json+images",
           "X-CSRFToken": self.webServiceToken
       }
@@ -905,7 +1047,8 @@ class StateMachine {
                 self.enqueueNextItem(self.stepGetActionCsrfToken, "stepGetActionCsrfToken");
               }
 
-              self.totalSize          += Number(responseJson["size"]);
+              self.totalUploadSize    += Number(responseJson["size"]);
+              self.totalDownloadSize  += Number(response.headers.get('Content-Length'));
               self.totalCreateCounter += Number(responseJson["create_counter"]);
               self.totalUpdateCounter += Number(responseJson["update_counter"]);
               self.totalDeleteCounter += Number(responseJson["delete_counter"]);
@@ -946,13 +1089,13 @@ class StateMachine {
       "action": "convert"
     };
 
-    fetch(self.webServiceEndpoint,
+    fetch(self.settings.getEndpoint(),
     {
       method: "PATCH",
       body: json,
       headers: {
           "Cookie": "csrftoken=" + self.webServiceToken,
-          "Authorization": getAuthorizationHeader(self.webServiceUsername, self.webServicePassword),
+          "Authorization": self.getAuthorizationHeader(),
           "Content-Type": "application/json+action",
           "X-CSRFToken": self.webServiceToken
       }
@@ -999,7 +1142,8 @@ class StateMachine {
                 self.enqueueNextItem(self.stepReportSuccess, "stepReportSuccess");
               }
 
-              self.totalSize          += Number(responseJson["size"]);
+              self.totalUploadSize    += Number(responseJson["size"]);
+              self.totalDownloadSize  += Number(response.headers.get('Content-Length'));
               self.totalCreateCounter += Number(responseJson["create_counter"]);
               self.totalUpdateCounter += Number(responseJson["update_counter"]);
               self.totalDeleteCounter += Number(responseJson["delete_counter"]);
@@ -1035,12 +1179,12 @@ class StateMachine {
 
   stepReportSuccess() {
     var self = this;
-    var bytesText = this.formatSize(self.totalSize);
 
     ui.alert(
       "SUCCESS",
       "Document successfully uploaded.\n" +
-      " * " + bytesText + " uploaded.\n" +
+      " * " + this.formatSize(self.totalUploadSize) + " uploaded.\n" +
+      " * " + this.formatSize(self.totalDownloadSize) + " downloaded.\n" +
       " * " + self.totalCreateCounter + " objects created.\n" +
       " * " + self.totalUpdateCounter + " objects updated.\n" +
       " * " + self.totalDeleteCounter + " objects deleted.\n" +
