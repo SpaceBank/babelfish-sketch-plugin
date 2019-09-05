@@ -62,10 +62,6 @@ class SettingsManager {
     var fullName = "show-settings-" + assignmentBugWorkaround(this._document.id);
     var oldValue = settings.sessionVariable(fullName);
 
-    console.log("oldValue == " + oldValue);
-    console.log("this._tag == " + this._tag);
-    console.log("this._syncmode == " + this._syncmode);
-
     switch (this._syncmode) {
       case 0:
         return false;
