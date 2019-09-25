@@ -5,321 +5,11 @@ import ui     from "sketch/ui"
 
 const fetch  = require("sketch-polyfill-fetch");
 const base64 = require("./base64.js");
-const settingsManager = require("./settingsmanager.js");
+const settingsManagerFactory = require("./settingsmanager.js");
+const settingsWindowFactory  = require("./settingswindow.js");
 
 
 function assignmentBugWorkaround(buggyValue) {return buggyValue; }
-
-
-function emptyAction() {}
-
-
-class TabPage {
-  createPopupField(labelText, initialValue, allValues) {
-    var popupLabel = NSTextField.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft,
-        this.currentY - (this.labelHeight + this.marginLabelTop),
-        this.labelWidth,
-        this.labelHeight
-      )
-    );
-
-    popupLabel.setStringValue(labelText);
-    popupLabel.setBezeled(false);
-    popupLabel.setDrawsBackground(false);
-    popupLabel.setEditable(false);
-    popupLabel.setSelectable(false);
-
-    var popupField = NSPopUpButton.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginPopupLeft,
-        this.currentY - (this.fieldHeight + this.marginPopupTop),
-        this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginPopupLeft + this.marginPopupRight),
-        this.labelHeight
-      )
-    );
-
-    var isSelected = false;
-
-    for (var index = 0; index < allValues.length; index++) {
-      popupField.addItemWithTitle(allValues[index]);
-
-      if (allValues[index] == initialValue) {
-        popupField.selectItemAtIndex(index);
-        isSelected = true;
-      }
-    }
-
-    if (!isSelected) {
-      popupField.selectItemAtIndex(0);
-    }
-
-    this.tabItemView.addSubview(popupLabel);
-    this.tabItemView.addSubview(popupField);
-
-    this.currentY -= (this.fieldHeight + this.spacingH);
-
-    return popupField;
-  }
-
-  createTextField(labelText, initialValue) {
-    var textLabel = NSTextField.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft,
-        this.currentY - (this.labelHeight + this.marginLabelTop),
-        this.labelWidth,
-        this.labelHeight
-      )
-    );
-
-    textLabel.setStringValue(labelText);
-    textLabel.setBezeled(false);
-    textLabel.setDrawsBackground(false);
-    textLabel.setEditable(false);
-    textLabel.setSelectable(false);
-    
-    var textField = NSTextField.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
-        this.currentY - (this.fieldHeight + this.marginTextTop),
-        this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft + this.marginTextRight),
-        this.labelHeight
-      )
-    );
-
-    textField.setStringValue(initialValue);
-    textField.setBezelStyle(1);
-    
-    this.tabItemView.addSubview(textLabel);
-    this.tabItemView.addSubview(textField);
-
-    this.currentY -= (this.fieldHeight + this.spacingH);
-
-    return textField;
-  }
-
-  createPasswordField(labelText, initialValue) {
-    var passwordLabel = NSTextField.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft,
-        this.currentY - (this.labelHeight + this.marginLabelTop),
-        this.labelWidth,
-        this.labelHeight
-      )
-    );
-
-    passwordLabel.setStringValue(labelText);
-    passwordLabel.setBezeled(false);
-    passwordLabel.setDrawsBackground(false);
-    passwordLabel.setEditable(false);
-    passwordLabel.setSelectable(false);
-    
-    var passwordField = NSSecureTextField.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
-        this.currentY - (this.fieldHeight + this.marginPopupTop),
-        this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft + this.marginTextRight),
-        this.labelHeight
-      )
-    );
-
-    passwordField.setStringValue(initialValue);
-    passwordField.setBezelStyle(1);
-    
-    this.tabItemView.addSubview(passwordLabel);
-    this.tabItemView.addSubview(passwordField);
-
-    this.currentY -= (this.fieldHeight + this.spacingH);
-
-    return passwordField;
-  }
-
-  createCheckboxField(labelText, initialValue) {
-    var checkboxField = NSButton.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
-        this.currentY - (this.fieldHeight + this.marginPopupTop),
-        this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft + this.marginTextRight),
-        this.labelHeight
-      )
-    );
-
-    checkboxField.setButtonType(3);
-    checkboxField.setState(initialValue);
-    checkboxField.setBezelStyle(1);
-    checkboxField.setTitle(labelText);
-    
-    this.tabItemView.addSubview(checkboxField);
-
-    this.currentY -= (this.fieldHeight + this.spacingH);
-
-    return checkboxField;
-  }
-
-  createRadioFields(labelTexts, initialValue) {
-    var labelTextNumber = labelTexts.length;
-    var boxOuterHeight = 23 + 2 * this.marginPopupTop + labelTextNumber * (this.fieldHeight + this.spacingH);
-    var box = NSBox.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft,
-        this.currentY - (boxOuterHeight + this.marginPopupTop),
-        this.totalW - (this.marginLabelLeft + this.marginLabelRight),
-        boxOuterHeight
-      )
-    );
-
-    box.setTitlePosition(0);
-
-    var boxInnerHeight = box.contentView().frame().size.height;
-    var boxInnerWidth  = box.contentView().frame().size.width;
-
-    var result = [];
-
-    for (var index = 0; index < labelTexts.length; index++) {
-      var radioField = NSButton.alloc().initWithFrame(
-        NSMakeRect(
-          this.marginLabelLeft,
-          boxInnerHeight - ((index + 1) * (this.fieldHeight + this.spacingH) + this.marginPopupTop),
-          boxInnerWidth - (this.marginLabelLeft + this.marginLabelRight),
-          this.labelHeight
-        )
-      );
-
-      radioField.setButtonType(4);
-      radioField.setState(index == initialValue);
-      radioField.setBezelStyle(1);
-      radioField.setTitle(labelTexts[index]);
-      radioField.setCOSJSTargetFunction(emptyAction);
-      
-      box.addSubview(radioField);
-
-      result.push(radioField);
-    }
-
-    this.tabItemView.addSubview(box);
-
-    this.currentY -= (boxOuterHeight + this.spacingH);
-
-    return result;
-  }
-
-  constructor(settingsWindow, labelText) {
-    this.tabItem          = NSTabViewItem.alloc().init();
-    this.tabItemView      = NSView.alloc().init();
-    this.tabItem.label    = labelText;
-    this.tabItem.view     = this.tabItemView;
-    this.labelWidth       = 80;
-    this.labelHeight      = 23;
-    this.fieldHeight      = 23;
-    this.marginLabelLeft  = 10;
-    this.marginLabelRight =  0;
-    this.marginLabelTop   =  2;
-    this.marginTextLeft   =  2;
-    this.marginTextRight  = 10;
-    this.marginTextTop    =  0;
-    this.marginPopupLeft  =  0;
-    this.marginPopupRight =  8;
-    this.marginPopupTop   =  0;
-
-    this.spacingH = 5;
-
-    settingsWindow.tabView.addTabViewItem(this.tabItem);
-
-    if (settingsWindow.tabView.numberOfTabViewItems() == 1) {
-      settingsWindow.tabW = this.tabItemView.frame().size.width;
-      settingsWindow.tabH = this.tabItemView.frame().size.height;
-    }
-
-    this.currentY = settingsWindow.tabH - this.spacingH;
-    this.totalW = settingsWindow.tabW;
-  }
-}
-
-
-class SettingsWindow {
-  _createChrome() {
-    this.tabView = NSTabView.alloc().initWithFrame(NSMakeRect(0, 0, 640, 480));
-    this.contanerView = NSView.alloc().initWithFrame(this.tabView.frame());
-    this.contanerView.addSubview(this.tabView);
-    this.window = NSAlert.alloc().init();
-    this.window.setMessageText("Settings");
-    this.window.setInformativeText("Space globalization plug-in settings");
-    this.window.setIcon(NSImage.alloc().initByReferencingFile(context.plugin.urlForResourceNamed("logo.png").path()));
-    this.window.addButtonWithTitle("Save");
-    this.window.addButtonWithTitle("Cancel");
-    this.window.accessoryView = this.contanerView;
-  }
-
-  _createTabPage(labelText) {
-    return new TabPage(this, labelText);
-  }
-
-  constructor(settings) {
-    this._settings = settings;
-    this._possibleEndpoints = [
-      "https://globalization.spacebank.xyz/sketch/update",
-      "https://roman-akopov.code.spacebank.xyz/sketch/update"
-    ];
-    this.endpoint = this._settings.getEndpoint();
-    this.username = this._settings.getUsername();
-    this.password = this._settings.getPassword();
-    this.syncmode = this._settings.getSyncmode();
-
-    this._createChrome();
-    this._pageAccount = this._createTabPage("Account");
-    this._endpointField = this._pageAccount.createPopupField(
-      "Endpoint:",
-      this.endpoint,
-      this._possibleEndpoints
-    );
-    this._usernameField = this._pageAccount.createTextField(
-      "Username:",
-      this.username
-    );
-    this._passwordField = this._pageAccount.createPasswordField(
-      "Password:",
-      this.password
-    );
-    
-    this._pagePreferences = this._createTabPage("Preferences");
-    this._syncmodeFields = this._pagePreferences.createRadioFields(
-      [
-        "Never show settings dialog",
-        "Show settings dialog before first synchronization",
-        "Show settings dialog before each synchronization",
-      ],
-      this.syncmode
-    );
-  }
-
-  run() {
-    var window = this.window;
-    var result = window.runModal();
-
-    if (result == 1000) {
-      this.endpoint = this._possibleEndpoints[this._endpointField.indexOfSelectedItem()];
-      this.username = this._usernameField.stringValue();
-      this.password = this._passwordField.stringValue();
-      this.syncmode = 2;
-
-      for (var index = 0; index < this._syncmodeFields.length; index++) {
-        if (this._syncmodeFields[index].state() == 1) {
-          this.syncmode = index;
-        }
-      }
-
-      this._settings.setEndpoint(this.endpoint);
-      this._settings.setUsername(this.username);
-      this._settings.setPassword(this.password);
-      this._settings.setSyncmode(this.syncmode);
-
-      return true;
-    }
-
-    return false;
-  }
-}
 
 
 class StateMachine {
@@ -327,40 +17,55 @@ class StateMachine {
     this.totalTimeFrom    = Date.now();
 
     this.document         = document;
-    this.settings         = settingsManager.create(this.document, this.totalTimeFrom);
-    this.callStack        = [];
+    this.settings         = settingsManagerFactory.create(this.document, this.totalTimeFrom);
+    this.stepStack        = [];
+    this.stepTimeFrom     = 0;
+    this.currentStep      = null;
+    this.loopIsRunning    = false;
     this.hasError         = false;
     this.errorTitle       = undefined;
     this.errorDescription = undefined;
 
-    this.callItem        = null;
-    this.webServiceToken = undefined;
+    this.projects = [];
+    this.project = null;
+
+    this.imageStats                = {};
 
     this.artboardCounter           = 0;
     this.layerCounter              = 0;
     this.layerFilterQueue          = [];
-    this.layerUploadQueue          = [];
+    this.layerUploadObject         = [];
     this.imageCounter              = 0;
     this.imageFilterQueue          = [];
-    this.imageUploadQueue          = [];
-    this.cumulativeImageUpload     = [];
-    this.cumulativeImageUploadSize = 1024 * 1024 * 1024;
-    this.imageStats                = {};
+    this.imageUploadObject         = [];
 
     this.totalDownloadSize  = 0;
     this.totalUploadSize    = 0;
+    this.serverTime         = 0;
     this.totalCreateCounter = 0;
     this.totalUpdateCounter = 0;
     this.totalDeleteCounter = 0;
 
-    this.prevWebServiceToken = undefined;
+    this.callableMap = new Map();
+    this.callableMap.set("Start",        this.stepStart.bind(this));
+    this.callableMap.set("CheckAccount", this.stepCheckAccount.bind(this));
+    this.callableMap.set("InputAccount", this.stepInputAccount.bind(this));
+    this.callableMap.set("ListProjects", this.stepListProjects.bind(this));
+    this.callableMap.set("CheckProject", this.stepCheckProject.bind(this));
+    this.callableMap.set("InputProject", this.stepInputProject.bind(this));
 
-    this.stepTimeFrom = null;
+    this.callableMap.set("LoadDocument", this.stepLoadDocument.bind(this));
+    this.callableMap.set("StatDocument", this.stepStatDocument.bind(this));
+    this.callableMap.set("VaryDocument", this.stepVaryDocument.bind(this));
+    this.callableMap.set("SaveDocument", this.stepSaveDocument.bind(this));
 
-    this.showIsRunning = false;
+    this.callableMap.set("EnumerateDocumentLayers", this.stepEnumerateDocumentLayers.bind(this));
+    this.callableMap.set("EnumerateChildrenLayers", this.stepEnumerateChildrenLayers.bind(this));
+
+    this.callableMap.set("ReportSuccess",           this.stepReportSuccess.bind(this));
   }
 
-  formatSize(byteNumber) {
+  utilFormatSize(byteNumber) {
     if        (byteNumber <               1024) {
       return byteNumber + " bytes";
     } else if (byteNumber <        1024 * 1024) {
@@ -372,14 +77,14 @@ class StateMachine {
     }
   }
 
-  formatTime(secondNumber) {
+  utilFormatTime(secondNumber) {
     var minutes = Math.floor(secondNumber / 60);
     var seconds = secondNumber % 60;
 
     return ("00" + minutes.toFixed(0)).slice(-2) + ":" + ("00" + seconds.toFixed(0)).slice(-2);
   }
 
-  formatError(error) {
+  utilFormatError(error) {
     if (typeof error.localizedDescription === "function") {
       return error.localizedDescription();
     } else if (typeof error.nativeException === "object") {
@@ -389,806 +94,725 @@ class StateMachine {
     }
   }
 
-  enqueueNextItem(func, name) {
-    this.callStack.splice(0, 0, [func.bind(this), name]);
+  fetchJsonRpc(methodName, params) {
+    var self = this;
+
+    return fetch(
+      self.settings.getEndpoint(),
+      {
+        method: "POST",
+        body: {
+          "jsonrpc": "2.0",
+          "method": methodName,
+          "id": Date.now(),
+          "params": params
+        },
+        headers: {
+          "Authorization": "Basic " + base64.encodeStr(self.settings.getUsername() + ":" + self.settings.getPassword())
+        }
+      });
   }
 
-  enqueueNextCall() {
-    setTimeout(this.callNextItem.bind(this), 0);
+  extractJsonRpc(json) {
+    var self = this;
+    var version = json["jsonrpc"];
+
+    if (version !== "2.0") {
+      self.hasError          = true;
+      self.errorTitle        = "JSON RPC ERROR";
+      self.errorDescription  = "Invalid version. Expected 2.0, got '" + version + "'";
+      self.loopIsRunning     = false
+
+      return null;
+    }
+
+    var error = json["error"];
+
+    if (error !== undefined) {
+      self.hasError          = true;
+      self.errorTitle        = "JSON RPC ERROR";
+      self.errorDescription  = error;
+      self.loopIsRunning     = false
+
+      return null;
+    }
+
+    self.totalUploadSize += json[".request.size"];
+    self.serverTime      += json[".request.time"];
+
+    return json["result"];
   }
 
-  showNextItem() {
+  enqueueNextStep(name) {
+    var self = this;
+
+    self.loopIsRunning = true;
+
+    if (name != null) {
+      self.stepStack.splice(0, 0, name);
+    }
+
+    setTimeout(self.executeNextStepInternal.bind(self), 0);
+  }
+
+  reportCurrentStep() {
     var self = this;
     var now = Date.now();
     var totalElapsed = Math.round((now - this.totalTimeFrom) / 1000);
     var message = "";
 
-    message += self.formatTime(totalElapsed) + " 🕑";
-    message += " " + this.formatSize(self.totalUploadSize) + " ⇑ " + this.formatSize(self.totalDownloadSize) + " ⇓ |";
+    message += self.utilFormatTime(totalElapsed) + " 🕑";
+    message += " " + self.utilFormatSize(self.totalUploadSize) + " ⇑ " + self.utilFormatSize(self.totalDownloadSize) + " ⇓ |";
 
-    if (self.callItem != null) {
-      switch (self.callItem[1]) {
-        case "stepCheckSettings":
-          message += " Checking settings.";
+    if (self.currentStep != null) {
+      switch (self.currentStep) {
+        case "Start":
+          message += " Start.";
           break;
-        case "stepEnumerateDocumentImages":
-        case "stepEnumerateImages":
-          message += " Enumerating images. " + self.imageCounter + " changed images found so far.";
+        case "CheckAccount":
+          message += " Checking account.";
           break;
-        case "stepEnumerateDocumentLayers":
-        case "stepEnumerateLayers":
+        case "InputAccount":
+          message += " Waiting for account user input.";
+          break;
+        case "ListProjects":
+          message += " Downloading project list.";
+          break;
+        case "CheckProject":
+          message += " Checking account.";
+          break;
+        case "InputProject":
+          message += " Waiting for account user input.";
+          break;
+        case "EnumerateDocumentLayers":
+        case "EnumerateChildrenLayers":
           message += " Enumerating layers. " + self.artboardCounter + " artboards and " + self.layerCounter + " layers found so far.";
           break;
-        case "stepGetActionCsrfToken":
-        case "stepUploadAction":
-          message += " Postprocessing uploaded data.";
+        case "LoadDocument":
+        case "StatDocument":
+          message += " Waiting for server.";
           break;
-        case "stepGetImageCsrfToken":
-        case "stepUploadImage":
-          message += " Uploading images. " + self.imageUploadQueue.length + " batches left.";
+        case "VaryDocument":
+          message += " Uploading data. " + self.layerUploadObject.length + " layers and " + self.imageUploadObject.length + " images left.";
           break;
-        case "stepGetLayerCsrfToken":
-        case "stepUploadLayer":
-          message += " Uploading layers.";
+        case "SaveDocument":
+          message += " Waiting for server.";
           break;
-        case "stepInputSettings":
-          message += " Waiting for settings.";
-          break;
-        case "stepReAskSettings":
-          break;
-        case "stepReportSuccess":
+        case "ReportSuccess":
           message += " Success.";
           break;
-        case "stepStart":
-          message += " Start.";
+        default:
           break;
       }
 
       ui.message(message);
     }
 
-    if (self.showIsRunning) {
-      setTimeout(self.showNextItem.bind(self), 500);
+    if (self.loopIsRunning) {
+      setTimeout(self.reportCurrentStep.bind(self), 500);
     } else {
       console.log(new Date(now).toISOString() + "; STOP");
     }
   }
 
-  callNextItem() {
+  executeNextStepInternal() {
     var self = this;
 
-    if (self.callItem != null) {
+    if (self.currentStep != null) {
       var stepDuration = (Date.now() - self.stepTimeFrom);
 
-      if (self.prevWebServiceToken != self.webServiceToken) {
-        console.log("    Token = \"" + self.webServiceToken + "\"; // was \"" + self.prevWebServiceToken + "\".");
-        self.prevWebServiceToken = self.webServiceToken;
+      if ((self.currentStep != "EnumerateLayers") && (self.currentStep != "EnumerateImages")) {
+        console.log("} //"  + self.currentStep + "; " + stepDuration + "ms; " + new Date(Date.now()).toISOString());
       }
 
-      if ((self.callItem[1] != "stepEnumerateLayers") && (self.callItem[1] != "stepEnumerateImages")) {
-        console.log("} //"  + self.callItem[1] + "; " + stepDuration + "ms; " + new Date(Date.now()).toISOString());
+      if (self.hasError) {
+        console.log("ERROR: " + self.errorTitle + "; " + self.errorDescription);
+        self.hasError = false;
+        ui.alert(self.errorTitle, self.errorDescription);
       }
     }
 
-    if (self.hasError) {
-      console.log("ERROR: " + self.errorTitle + "; " + self.errorDescription);
-      self.hasError = false;
-      ui.alert(self.errorTitle, self.errorDescription);
+    if (self.stepStack.length == 0) {
+      self.loopIsRunning = false;
+      self.currentStep = null;
+      return;
     }
 
-    if (self.callStack.length > 0) {
-      self.callItem = self.callStack.pop();
-      self.stepTimeFrom = Date.now();
+    self.currentStep = self.stepStack.pop();
 
-      setTimeout(self.callItem[0], 0);
-
-      if ((self.callItem[1] != "stepEnumerateLayers") && (self.callItem[1] != "stepEnumerateImages")) {
-        if (self.callItem[1] == "stepReportSuccess") {
-          self.showIsRunning = false;
-          console.log(self.callItem[1] + " { } // " + new Date(Date.now()).toISOString());
+    try {
+      if ((self.currentStep != "EnumerateLayers") && (self.currentStep != "EnumerateImages")) {
+        if (self.currentStep == "ReportSuccess") {
+          self.loopIsRunning = false;
+          console.log(self.currentStep + " { } // " + new Date(Date.now()).toISOString());
         } else {
-          self.showIsRunning = true;
-          console.log(self.callItem[1] + " { // " + new Date(Date.now()).toISOString());
+          self.loopIsRunning = true;
+          console.log(self.currentStep + " { // " + new Date(Date.now()).toISOString());
         }
       }
-    } else {
-      self.showIsRunning = false;
-      self.callItem = null;
-    }
-  }
 
-  getAuthorizationHeader() {
-    return "Basic " + base64.encodeStr(this.settings.getUsername() + ":" + this.settings.getPassword());
+      var func = self.callableMap.get(self.currentStep);
+      self.stepTimeFrom = Date.now();
+      func();
+    } catch (e) {
+      console.log(e.message);
+      self.hasError         = true;
+      self.errorTitle       = "INTERNAL ERROR";
+      self.errorDescription = e.message;
+      self.loopIsRunning    = false
+    }
   }
 
   stepStart() {
     var self = this;
 
-    self.enqueueNextItem(self.stepCheckSettings, "stepCheckSettings");
-    self.enqueueNextCall();
+    self.enqueueNextStep("CheckAccount");
   }
 
-  stepCheckSettings() {
+  stepCheckAccount() {
     var self = this;
 
-    if (self.settings.shouldShowSettings()) {
-      self.enqueueNextItem(self.stepInputSettings, "stepInputSettings");
+    if (self.settings.shouldShowSettings("account") || !self.settings.isAccountValid()) {
+      self.enqueueNextStep("InputAccount");
     } else {
-      self.enqueueNextItem(self.stepEnumerateDocumentLayers, "stepEnumerateDocumentLayers");
+      self.enqueueNextStep("ListProjects");
     }
-
-    self.enqueueNextCall();
   }
 
-  stepInputSettings() {
+  stepInputAccount() {
     var self = this;
-    var settingWindow = new SettingsWindow(self.settings);
+    var settingWindow = settingsWindowFactory.create(self.settings, "account", self.projects);
 
     if (settingWindow.run()) {
-      self.enqueueNextItem(self.stepCheckSettings, "stepCheckSettings");
+      self.enqueueNextStep("CheckAccount");
     } else {
       self.hasError           = true;
-      self.errorTitle         = "USER INPUT (A01)";
-      self.errorDescription   = "Settings are required.";
+      self.errorTitle         = "(C01) USER INPUT";
+      self.errorDescription   = "Account is required.";
+      self.enqueueNextStep(null);
+    }
+  }
+
+  stepListProjects() {
+    var self = this;
+
+    if (self.projects.length > 0) {
+      self.enqueueNextStep("CheckProject");
+      return;
     }
 
-    self.enqueueNextCall();
+    self
+      .fetchJsonRpc("project.list", null)
+      .then(function(response) {
+        if (response.status == 200) {
+          self.totalDownloadSize += Number(response.headers.get('Content-Length'));
+
+          response.json()
+            .then(function(responseJson) {
+              var result = self.extractJsonRpc(responseJson);
+
+              if (result !== null) {
+                self.projects = result;
+                self.enqueueNextStep("CheckProject");
+              } else {
+                self.enqueueNextStep(null);
+              }
+            })
+            .catch(function(error) {
+              self.hasError         = true;
+              self.errorTitle       = "(D01) INVALID JSON";
+              self.errorDescription = self.utilFormatError(error);
+              self.enqueueNextStep(null);
+            });
+        } else if (response.status == 403) {
+          self.settings.makeShowSettings("account");
+          self.enqueueNextStep("InputAccount");
+        } else {
+          self.hasError           = true;
+          self.errorTitle         = "(D02) INVALID RESPONSE";
+          self.errorDescription   = response.status + ": " + response.statusText;
+          self.enqueueNextStep(null);
+        }
+      })
+      .catch(function(error) {
+        self.hasError           = true;
+        self.errorTitle         = "(D03) HTTP";
+        self.errorDescription   = self.utilFormatError(error);
+        self.enqueueNextStep(null);
+      });
   }
 
-  stepReAskSettings() {
+  stepCheckProject() {
     var self = this;
+    var shouldShowSettings = self.settings.shouldShowSettings("project");
+    var isProjectValid = self.settings.isProjectValid();
 
-    self.settings.makeShowSettings();
-    self.enqueueNextCall();
+    if (shouldShowSettings || !isProjectValid) {
+      self.enqueueNextStep("InputProject");
+      return;
+    }
+
+    for (var index = 0; index < self.projects.length; index++) {
+      var project = self.projects[index];
+
+      if (project.id == self.settings.getProject()) {
+        self.project = project;
+      }
+    }
+
+    self.enqueueNextStep("LoadDocument");
   }
 
-  stepEnumerateLayers() {
+  stepInputProject() {
     var self = this;
-    var item = self.layerFilterQueue.pop();
-    var layer = item[0];
-    var parentLayers = item[1];
+    var settingWindow = settingsWindowFactory.create(self.settings, "project", self.projects);
 
-    if ((layer.type != "Page") || (layer.name != "Assets")) {
-      if (
-        (layer.type == "Page") ||
-        (layer.type == "Artboard") ||
-        (layer.type == "SymbolMaster") ||
-        (layer.type == "SymbolInstance") ||
-        (layer.type == "Group") ||
-        // (layer.type == "Image") ||
-        (layer.type == "Text") ||
-        (layer.type == "Shape") ||
-        // (layer.type == "ShapePath") ||
-        false) {
-        self.layerCounter++;
+    if (settingWindow.run()) {
+      self.enqueueNextStep("CheckProject");
+    } else {
+      self.hasError         = true;
+      self.errorTitle       = "(F01) USER INPUT";
+      self.errorDescription = "Project is required.";
+      self.enqueueNextStep(null);
+    }
+  }
 
-        if (layer.type == "Artboard") {
-          self.artboardCounter++;
+  stepLoadDocument() {
+    var self = this;
+    var uuid = assignmentBugWorkaround(self.document.id);
+
+    self
+      .fetchJsonRpc("document.load", [uuid, self.settings.getProject()])
+      .then(function(response) {
+        if (response.status == 200) {
+          self.totalDownloadSize += Number(response.headers.get('Content-Length'));
+
+          response.json()
+            .then(function(responseJson) {
+              var result = self.extractJsonRpc(responseJson);
+
+              self.enqueueNextStep("StatDocument");
+            })
+            .catch(function(error) {
+              self.hasError         = true;
+              self.errorTitle       = "(G01) INVALID JSON";
+              self.errorDescription = self.utilFormatError(error);
+              self.enqueueNextStep(null);
+            });
+        } else {
+          self.hasError           = true;
+          self.errorTitle         = "(G02) INVALID RESPONSE";
+          self.errorDescription   = response.status + ": " + response.statusText;
+          self.enqueueNextStep(null);
+        }
+      })
+      .catch(function(error) {
+        self.hasError           = true;
+        self.errorTitle         = "(G03) HTTP)";
+        self.errorDescription   = self.utilFormatError(error);
+        self.enqueueNextStep(null);
+      });
+  }
+
+  stepStatDocument() {
+    var self = this;
+    var uuid = assignmentBugWorkaround(self.document.id);
+
+    self
+      .fetchJsonRpc("document.stat", [uuid])
+      .then(function(response) {
+        if (response.status == 200) {
+          self.totalDownloadSize += Number(response.headers.get('Content-Length'));
+
+          response.json()
+            .then(function(responseJson) {
+              var result = self.extractJsonRpc(responseJson);
+
+              self.enqueueNextStep("EnumerateDocumentLayers");
+            })
+            .catch(function(error) {
+              self.hasError         = true;
+              self.errorTitle       = "(H01) INVALID JSON";
+              self.errorDescription = self.utilFormatError(error);
+              self.enqueueNextStep(null);
+            });
+        } else {
+          self.hasError           = true;
+          self.errorTitle         = "(H02) INVALID RESPONSE";
+          self.errorDescription   = response.status + ": " + response.statusText;
+          self.enqueueNextStep(null);
+        }
+      })
+      .catch(function(error) {
+        self.hasError           = true;
+        self.errorTitle         = "(H03) HTTP";
+        self.errorDescription   = self.utilFormatError(error);
+        self.enqueueNextStep(null);
+      });
+  }
+
+  stepVaryDocument() {
+    var self = this;
+    var uuid = assignmentBugWorkaround(self.document.id);
+    var layers = [];
+    var images = [];
+
+    if (self.layerUploadObject.length > 0) {
+      layers.push(self.layerUploadObject.pop());
+    } else if (self.imageUploadObject.length > 0) {
+      var cumulativeSize = 0;
+
+      while (cumulativeSize < 1024 * 1024) {
+        var image = self.imageUploadObject.pop();
+
+        if (image == undefined) {
+          break;
         }
 
-        var uuid = assignmentBugWorkaround(layer.id);
-        var masterUuid = null;
-        var masterLibraryName = null;
-        var masterLibraryType = null;
-        var masterLibraryValid = false;
-        var masterLibraryEnabled = false;
-        var overrides = [];
+        var pngImage = image["png_image"];
+        var svgImage = image["svg_image"];
 
-        if (layer.type == "SymbolInstance") {
-          layer.overrides.forEach(function(o, i) {
-            if (o.property == "stringValue") {
-              overrides.push({
-                "path": o.path,
-                "value": o.value
+        if (pngImage != null) {
+          cumulativeSize += pngImage.length;
+        }
+
+        if (svgImage != null) {
+          cumulativeSize += svgImage.length;
+        }
+
+        images.push(image);
+      }
+    }
+
+    if ((layers.length == 0) && (images.length == 0)) {
+      self.enqueueNextStep("SaveDocument");
+    } else {
+      self
+        .fetchJsonRpc("document.vary", [uuid, layers, images])
+        .then(function(response) {
+          if (response.status == 200) {
+            self.totalDownloadSize += Number(response.headers.get('Content-Length'));
+
+            response.json()
+              .then(function(responseJson) {
+                var result = self.extractJsonRpc(responseJson);
+
+                self.enqueueNextStep("VaryDocument");
+              })
+              .catch(function(error) {
+                self.hasError         = true;
+                self.errorTitle       = "(I01) INVALID JSON";
+                self.errorDescription = self.utilFormatError(error);
+                self.enqueueNextStep(null);
               });
+          } else {
+            self.hasError           = true;
+            self.errorTitle         = "(I02) INVALID RESPONSE";
+            self.errorDescription   = response.status + ": " + response.statusText;
+            self.enqueueNextStep(null);
+          }
+        })
+        .catch(function(error) {
+          self.hasError           = true;
+          self.errorTitle         = "(I03) HTTP";
+          self.errorDescription   = self.utilFormatError(error);
+          self.enqueueNextStep(null);
+        });
+    }
+  }
+
+  stepSaveDocument() {
+    var self = this;
+    var uuid = assignmentBugWorkaround(self.document.id);
+
+    self
+      .fetchJsonRpc("document.save", [uuid])
+      .then(function(response) {
+        if (response.status == 200) {
+          self.totalDownloadSize += Number(response.headers.get('Content-Length'));
+
+          response.json()
+            .then(function(responseJson) {
+              var result = self.extractJsonRpc(responseJson);
+
+              self.totalCreateCounter = result['created'];
+              self.totalUpdateCounter = result['updated'];
+              self.totalDeleteCounter = result['deleted'];
+
+              self.enqueueNextStep("ReportSuccess");
+            })
+            .catch(function(error) {
+              self.hasError         = true;
+              self.errorTitle       = "(J01) INVALID JSON";
+              self.errorDescription = self.utilFormatError(error);
+              self.enqueueNextStep(null);
+            });
+        } else {
+          self.hasError           = true;
+          self.errorTitle         = "(J02) INVALID RESPONSE";
+          self.errorDescription   = response.status + ": " + response.statusText;
+          self.enqueueNextStep(null);
+        }
+      })
+      .catch(function(error) {
+        self.hasError           = true;
+        self.errorTitle         = "(J03) HTTP";
+        self.errorDescription   = self.utilFormatError(error);
+        self.enqueueNextStep(null);
+      });
+  }
+
+  stepEnumerateDocumentLayers() {
+    var self = this;
+    var uuid = assignmentBugWorkaround(self.document.id);
+    var documentLayers = [];
+
+    self.document.pages.forEach(
+      function(page, pageIndex) {
+        if (page.name === "Symbols") {
+          self.layerFilterQueue.push([page, documentLayers]);
+        }
+      }
+    );
+
+    self.document.pages.forEach(
+      function(page, pageIndex) {
+        if (page.name !== "Symbols") {
+          self.layerFilterQueue.push([page, documentLayers]);
+        }
+      }
+    );
+
+    self.layerUploadObject = [{
+      "id": uuid,
+      "type": self.document.type,
+      "name": self.document.path === undefined ? "Document Is Not Saved" : self.document.path,
+      "master_id": null,
+      "master_library_name": null,
+      "master_library_type": null,
+      "master_library_valid": false,
+      "master_library_enabled": false,
+      "target_id": null,
+      "text": null,
+      "rect": null,
+      "svg_image": null,
+      "layers": documentLayers,
+      "overrides": []
+    }];
+    self.imageUploadObject = [];
+
+    self.enqueueNextStep("EnumerateChildrenLayers");
+  }
+
+  stepEnumerateChildrenLayers() {
+    var self = this;
+    var deadline = Date.now() + 100;
+
+    while ((self.layerFilterQueue.length > 0) && (Date.now() < deadline)) {
+      var currentItem = self.layerFilterQueue.pop();
+      var currentLayer = currentItem[0];
+      var parentLayers = currentItem[1];
+      var isFilteredOut = false;
+
+      self.project.filters.forEach(function(filter, i) {
+        if ((filter.type == currentLayer.type) && (filter.name == currentLayer.name)) {
+          isFilteredOut = true;
+        }
+      });
+
+      if (!isFilteredOut) {
+        if (
+          (currentLayer.type == "Page") ||
+          (currentLayer.type == "Artboard") ||
+          (currentLayer.type == "SymbolMaster") ||
+          (currentLayer.type == "SymbolInstance") ||
+          (currentLayer.type == "Group") ||
+          // (currentLayer.type == "Image") ||
+          (currentLayer.type == "Text") ||
+          (currentLayer.type == "Shape") ||
+          // (currentLayer.type == "ShapePath") ||
+          false) {
+          self.layerCounter++;
+
+          if (currentLayer.type == "Artboard") {
+            self.artboardCounter++;
+          }
+
+          var uuid = assignmentBugWorkaround(currentLayer.id);
+          var masterUuid = null;
+          var masterLibraryName = null;
+          var masterLibraryType = null;
+          var masterLibraryValid = false;
+          var masterLibraryEnabled = false;
+          var text = null;
+          var rect = null;
+          var svgImage = null;
+          var overrides = [];
+
+          if (currentLayer.type == "SymbolInstance") {
+            currentLayer.overrides.forEach(function(override, i) {
+              if (override.property == "stringValue") {
+                overrides.push({
+                  "path":  override.path,
+                  "value": override.value
+                });
+              }
+            });
+
+            var master = currentLayer.master;
+
+            if (master != null) {
+              masterUuid = assignmentBugWorkaround(master.id);
+
+              var library = master.getLibrary();
+
+              if (library != null) {
+                masterLibraryName    = library.name;
+                masterLibraryType    = library.type;
+                masterLibraryValid   = library.valid;
+                masterLibraryEnabled = library.enabled;
+              }
             }
-          });
-
-          var master = layer.master;
-
-          if (master != null) {
-            masterUuid = assignmentBugWorkaround(master.id);
-
-            var library = master.getLibrary();
+          } else if (currentLayer.type == "SymbolMaster") {
+            var library = currentLayer.getLibrary();
 
             if (library != null) {
               masterLibraryName    = library.name;
               masterLibraryType    = library.type;
               masterLibraryValid   = library.valid;
               masterLibraryEnabled = library.enabled;
+            } else {
+              masterLibraryType    = "Local";
+              masterLibraryValid   = true;
+              masterLibraryEnabled = true;
+            }
+          } else if (currentLayer.type == "Text") {
+            text = currentLayer.text;
+
+            const svgOptions = { formats: "svg", output: false };
+            const svgBuffer = sketch.export(currentLayer, svgOptions);
+
+            svgImage = base64.encodeBin(svgBuffer);
+          }
+
+          var targetUuid = null;
+
+          if (currentLayer.flow !== undefined) {
+            if (currentLayer.flow.targetId == dom.Flow.BackTarget) {
+              targetUuid = "00000000-0000-0000-0000-000000000000";
+            } else {
+              targetUuid = currentLayer.flow.targetId;
             }
           }
-        }
 
-        if (layer.type == "SymbolMaster") {
-          var library = layer.getLibrary();
-
-          if (library != null) {
-            masterLibraryName    = library.name;
-            masterLibraryType    = library.type;
-            masterLibraryValid   = library.valid;
-            masterLibraryEnabled = library.enabled;
-          } else {
-            masterLibraryType    = "Local";
-            masterLibraryValid   = true;
-            masterLibraryEnabled = true;
-          }
-        }
-
-        var targetUuid = null;
-
-        if (layer.flow !== undefined) {
-          if (layer.flow.targetId == dom.Flow.BackTarget) {
-            targetUuid = "00000000-0000-0000-0000-000000000000";
-          } else {
-            targetUuid = layer.flow.targetId;
-          }
-        }
-
-        var text = null;
-
-        if (layer.type == "Text") {
-          text = layer.text;
-        }
-
-        var rect = null;
-
-        if (layer.frame !== undefined) {
-          rect = { "x": layer.frame.x, "y": layer.frame.y, "w": layer.frame.width, "h": layer.frame.height };
-        }
-
-        var childLayers = [];
-
-        if (layer.layers !== undefined) {
-          layer.layers.forEach(
-            function(l, i) {
-              self.layerFilterQueue.push([l, childLayers]);
-            }
-          );
-        }
-
-        parentLayers.push({
-          "uuid": uuid,
-          "type": layer.type,
-          "name": layer.name,
-          "master_uuid": masterUuid,
-          "master_library_name":    masterLibraryName,
-          "master_library_type":    masterLibraryType,
-          "master_library_valid":   masterLibraryValid,
-          "master_library_enabled": masterLibraryEnabled,
-          "target_uuid": targetUuid,
-          "text": text,
-          "rect": rect,
-          "layers": childLayers,
-          "overrides": overrides
-        });
-      }
-    }
-
-    if (self.layerFilterQueue.length > 0) {
-      self.enqueueNextItem(self.stepEnumerateLayers, "stepEnumerateLayers");
-      self.enqueueNextCall();
-    } else if (self.layerUploadQueue.length > 0) {
-      self.enqueueNextItem(self.stepGetLayerCsrfToken, "stepGetLayerCsrfToken");
-      self.enqueueNextCall();
-    } else {
-      self.enqueueNextItem(self.stepReportSuccess, "stepReportSuccess");
-      self.enqueueNextCall();
-    }
-  }
-
-  stepEnumerateDocumentLayers() {
-    var self = this;
-    var documentLayers = [];
-
-    self.document.pages.forEach(
-      function(page, pageIndex) {
-        self.layerFilterQueue.push([page, documentLayers]);
-      }
-    );
-
-    var uuid = assignmentBugWorkaround(self.document.id);
-
-    self.layerUploadQueue.push({
-      "uuid": uuid,
-      "type": self.document.type,
-      "name": self.document.path === undefined ? "Document Is Not Saved" : self.document.path,
-      "master_uuid": null,
-      "master_library_name": null,
-      "master_library_type": null,
-      "master_library_valid": false,
-      "master_library_enabled": false,
-      "target_uuid": null,
-      "text": null,
-      "rect": null,
-      "layers": documentLayers,
-      "overrides": []
-    });
-
-    self.enqueueNextItem(self.stepEnumerateLayers, "stepEnumerateLayers");
-    self.enqueueNextCall();
-  }
-
-  stepEnumerateImages() {
-    var self = this;
-    var layer = self.imageFilterQueue.pop();
-
-    if ((layer.type != "Page") || (layer.name != "Assets")) {
-      if (
-        (layer.type == "Page") ||
-        (layer.type == "Artboard") ||
-        (layer.type == "SymbolMaster") ||
-        (layer.type == "SymbolInstance") ||
-        (layer.type == "Group") ||
-        // (layer.type == "Image") ||
-        (layer.type == "Text") ||
-        (layer.type == "Shape") ||
-        // (layer.type == "ShapePath") ||
-        false) {
-        if (layer.layers !== undefined) {
-          layer.layers.forEach(
-            function(l, i) {
-              self.imageFilterQueue.push(l);
-            }
-          );
-        }
-
-        if (layer.type == "Artboard") {
-          var uuid = assignmentBugWorkaround(layer.id);
-          var imageStats = self.imageStats[uuid];
-
-          if (imageStats === undefined) {
-            imageStats = {"png_image_size": -1};
+          if (currentLayer.frame !== undefined) {
+            rect = {
+              "x": currentLayer.frame.x,
+              "y": currentLayer.frame.y,
+              "w": currentLayer.frame.width,
+              "h": currentLayer.frame.height
+            };
           }
 
-          const pngOptions = { formats: "png", output: false };
-          const pngBuffer = sketch.export(layer, pngOptions);
+          var childLayers = [];
 
-          var pngImage = base64.encodeBin(pngBuffer);
-
-          if (pngBuffer.length != imageStats["png_image_size"]) {
-            if (self.cumulativeImageUploadSize > 1024 * 1024) {
-              self.cumulativeImageUpload = [];
-              self.cumulativeImageUploadSize = 0;
-              self.imageUploadQueue.push({"images": self.cumulativeImageUpload});
-            }
-
-            self.cumulativeImageUpload.push({
-              "uuid": uuid,
-              "png_image": pngImage,
-              "svg_image": null
-            });
-
-            self.imageCounter++;
-            self.cumulativeImageUploadSize += pngImage.length;
+          if (currentLayer.layers !== undefined) {
+            currentLayer.layers.forEach(
+              function(childLayer, i) {
+                self.layerFilterQueue.push([childLayer, childLayers]);
+              }
+            );
           }
+
+          parentLayers.push({
+            "id":                     uuid,
+            "type":                   currentLayer.type,
+            "name":                   currentLayer.name,
+            "master_id":              masterUuid,
+            "master_library_name":    masterLibraryName,
+            "master_library_type":    masterLibraryType,
+            "master_library_valid":   masterLibraryValid,
+            "master_library_enabled": masterLibraryEnabled,
+            "target_id":              targetUuid,
+            "text":                   text,
+            "rect":                   rect,
+            "svg_image":              svgImage,
+            "layers":                 childLayers,
+            "overrides":              overrides
+          });
         }
 
-        if (layer.type == "Text") {
-          var uuid = assignmentBugWorkaround(layer.id);
+        if (currentLayer.type == "Artboard") {
+          var uuid = assignmentBugWorkaround(currentLayer.id);
           var imageStats = self.imageStats[uuid];
 
           if (imageStats === undefined) {
             imageStats = {"svg_image_size": -1, "png_image_size": -1};
           }
 
-          const svgOptions = { formats: "svg", output: false };
-          const svgBuffer = sketch.export(layer, svgOptions);
+          const pngOptions = { formats: "png", output: false };
+          const pngBuffer = sketch.export(currentLayer, pngOptions);
 
-          var svgImage = base64.encodeBin(svgBuffer);
+          var pngImage = base64.encodeBin(pngBuffer);
 
-          if (svgBuffer.length != imageStats["svg_image_size"]) {
+          if (pngBuffer.length != imageStats["png_image_size"]) {
+            self.imageUploadObject.push({
+              "id": uuid,
+              "png_image": pngImage
+            });
+
+            self.imageCounter++;
+          }
+        } else if (currentLayer.type == "Text") {
+          var uuid = assignmentBugWorkaround(currentLayer.id);
+          var imageStats = self.imageStats[uuid];
+
+          if (imageStats === undefined) {
+            imageStats = {"svg_image_size": -1, "png_image_size": -1};
+          }
+
+          if (svgImage.length != imageStats["svg_image_size"]) {
             const pngOptions = { formats: "png", output: false };
-            const pngBuffer = sketch.export(layer, pngOptions);
+            const pngBuffer = sketch.export(currentLayer, pngOptions);
 
             var pngImage = base64.encodeBin(pngBuffer);
 
             if (pngBuffer.length != imageStats["png_image_size"]) {
-              if (self.cumulativeImageUploadSize > 1024 * 1024) {
-                self.cumulativeImageUpload = [];
-                self.cumulativeImageUploadSize = 0;
-                self.imageUploadQueue.push({"images": self.cumulativeImageUpload});
-              }
-
-              self.cumulativeImageUpload.push({
-                "uuid": uuid,
-                "png_image": pngImage,
-                "svg_image": svgImage
+              self.imageUploadObject.push({
+                "id": uuid,
+                "png_image": pngImage
               });
 
               self.imageCounter++;
-              self.cumulativeImageUploadSize += pngImage.length;
-              self.cumulativeImageUploadSize += svgImage.length;
             }
           }
         }
       }
     }
 
-    if (self.imageFilterQueue.length > 0) {
-      self.enqueueNextItem(self.stepEnumerateImages, "stepEnumerateImages");
-      self.enqueueNextCall();
+    if (self.layerFilterQueue.length > 0) {
+      self.enqueueNextStep("EnumerateChildrenLayers");
     } else {
-      self.cumulativeImageUpload = [];
-      self.cumulativeImageUploadSize = 0;
-      self.imageUploadQueue.push({"images": self.cumulativeImageUpload});
-
-      if (self.imageUploadQueue.length > 0) {
-        self.enqueueNextItem(self.stepGetImageCsrfToken, "stepGetImageCsrfToken");
-        self.enqueueNextCall();
-      } else {
-        self.enqueueNextItem(self.stepGetActionCsrfToken, "stepGetActionCsrfToken");
-        self.enqueueNextCall();
-      }
+      self.enqueueNextStep("VaryDocument");
     }
-  }
-
-  stepEnumerateDocumentImages() {
-    var self = this;
-
-    self.document.pages.forEach(
-      function(page, pageIndex) {
-        self.imageFilterQueue.push(page);
-      }
-    );
-
-    self.enqueueNextItem(self.stepEnumerateImages, "stepEnumerateImages");
-    self.enqueueNextCall();
-  }
-
-  utilGetCsrfToken(nextItem, nextName) {
-    var self = this;
-    var csrfTokenPattern = /csrftoken=([A-Za-z0-9]+)/s;
-
-    fetch(self.settings.getEndpoint(),
-    {
-      method: "GET",
-      headers: {
-          "Authorization": self.getAuthorizationHeader()
-      }
-    })
-    .then(function(response) {
-      if (response.status == 200) {
-        var setCookieHeader = String(response.headers.get("set-cookie"));
-
-        if (setCookieHeader !== undefined) {
-          self.webServiceToken  = csrfTokenPattern.exec(setCookieHeader)[1];
-          self.enqueueNextItem(nextItem, nextName);
-        } else {
-          self.hasError         = true;
-          self.errorTitle       = "HTTP (A01)";
-          self.errorDescription = "Server returned no CSRF token cookie.";
-          self.webServiceToken  = undefined;
-        }
-      } else if (response.status == 403) {
-        self.hasError           = true;
-        self.errorTitle         = "HTTP (A02)";
-        self.errorDescription   = "Authentication failed.\n" + response.status + ": " + response.statusText;
-        self.webServiceToken    = undefined;
-        self.enqueueNextItem(self.stepReAskSettings, "stepReAskSettings");
-      } else {
-        self.hasError           = true;
-        self.errorTitle         = "HTTP (A03)";
-        self.errorDescription   = response.status + ": " + response.statusText;
-        self.webServiceToken    = undefined;
-        self.enqueueNextItem(self.stepReAskSettings, "stepReAskSettings");
-      }
-
-      self.enqueueNextCall();
-    })
-    .catch(function(error) {
-      self.hasError           = true;
-      self.errorTitle         = "HTTP (A04)";
-      self.errorDescription   = self.formatError(error);
-      self.webServiceToken    = undefined;
-      self.enqueueNextCall();
-    });
-  }
-
-  stepGetLayerCsrfToken() {
-    this.utilGetCsrfToken(this.stepUploadLayer, "stepUploadLayer");
-  }
-
-  stepGetImageCsrfToken() {
-    this.utilGetCsrfToken(this.stepUploadImage, "stepUploadImage");
-  }
-
-  stepGetActionCsrfToken() {
-    this.utilGetCsrfToken(this.stepUploadAction, "stepUploadAction");
-  }
-
-  stepUploadLayer() {
-    var self = this;
-    var json = self.layerUploadQueue.pop();
-
-    fetch(self.settings.getEndpoint(),
-    {
-      method: "PATCH",
-      body: json,
-      headers: {
-          "Cookie": "csrftoken=" + self.webServiceToken,
-          "Authorization": self.getAuthorizationHeader(),
-          "Content-Type": "application/json+layers",
-          "X-CSRFToken": self.webServiceToken
-      }
-    })
-    .then(function(response) {
-      var contentType = response.headers.get("content-type");
-
-      if (contentType.startsWith("text/html")) {
-        response.text()
-          .then(function(responseText) {
-            var titlePattern   = /<title>(.*)<\/title>/s;
-            var titleMatch     = titlePattern.exec(responseText);
-            var summaryPattern = /<div id="summary">(.*?)<\/div>/s;
-            var summaryMatch   = summaryPattern.exec(responseText);
-
-            self.hasError           = true;
-            self.errorTitle         = "HTTP (B01)";
-            self.errorDescription   = response.status + ": " + response.statusText;
-
-            if (titleMatch != null) {
-              self.errorDescription += "\n" + titleMatch[1];
-            }
-
-            if (summaryMatch != null) {
-              self.errorDescription += "\n" + summaryMatch[1].replace(/<\/?[a-z0-1]+>/sg, "").replace(/\n[ ]+/sg, "");
-            }
-
-            self.enqueueNextCall();
-          })
-          .catch(function(error) {
-            self.hasError           = true;
-            self.errorTitle         = "HTTP (B02)";
-            self.errorDescription   = self.formatError(error);
-
-            self.enqueueNextCall();
-          });
-      } else if (contentType.startsWith("application/json") || contentType.startsWith("text/json")) {
-        response.json()
-          .then(function(responseJson) {
-            if ((response.status >= 200) && (response.status < 300)) {
-              if (self.layerUploadQueue.length > 0) {
-                self.enqueueNextItem(self.stepGetLayerCsrfToken, "stepGetLayerCsrfToken");
-              } else {
-                self.enqueueNextItem(self.stepEnumerateDocumentImages, "stepEnumerateDocumentImages");
-              }
-
-              self.totalUploadSize    += Number(responseJson["size"]);
-              self.totalDownloadSize  += Number(response.headers.get('Content-Length'));
-              self.totalCreateCounter += Number(responseJson["create_counter"]);
-              self.totalUpdateCounter += Number(responseJson["update_counter"]);
-              self.totalDeleteCounter += Number(responseJson["delete_counter"]);
-              self.imageStats         = responseJson["image_stats"];
-            } else {
-              self.hasError           = true;
-              self.errorTitle         = "HTTP (B03)";
-              self.errorDescription   = response.status + ": " + response.statusText;
-            }
-
-            self.enqueueNextCall();
-          })
-          .catch(function(error) {
-            self.hasError           = true;
-            self.errorTitle         = "HTTP (B04)";
-            self.errorDescription   = self.formatError(error);
-
-            self.enqueueNextCall();
-          });
-      } else {
-        self.hasError           = true;
-        self.errorTitle         = "HTTP (B05)";
-        self.errorDescription   = response.status + ": " + response.statusText;
-      }
-    })
-    .catch(function(error) {
-      self.hasError           = true;
-      self.errorTitle         = "HTTP (B06)";
-      self.errorDescription   = self.formatError(error);
-
-      self.enqueueNextCall();
-    });
-  }
-
-  stepUploadImage() {
-    var self = this;
-    var json = self.imageUploadQueue.pop();
-
-    fetch(self.settings.getEndpoint(),
-    {
-      method: "PATCH",
-      body: json,
-      headers: {
-          "Cookie": "csrftoken=" + self.webServiceToken,
-          "Authorization": self.getAuthorizationHeader(),
-          "Content-Type": "application/json+images",
-          "X-CSRFToken": self.webServiceToken
-      }
-    })
-    .then(function(response) {
-      var contentType = response.headers.get("content-type");
-
-      if (contentType.startsWith("text/html")) { 
-        response.text()
-          .then(function(responseText) {
-            var titlePattern   = /<title>(.*)<\/title>/s;
-            var titleMatch     = titlePattern.exec(responseText);
-            var summaryPattern = /<div id="summary">(.*?)<\/div>/s;
-            var summaryMatch   = summaryPattern.exec(responseText);
-
-            self.hasError           = true;
-            self.errorTitle         = "HTTP (C01)";
-            self.errorDescription   = response.status + ": " + response.statusText;
-
-            if (titleMatch != null) {
-              self.errorDescription += "\n" + titleMatch[1];
-            }
-
-            if (summaryMatch != null) {
-              self.errorDescription += "\n" + summaryMatch[1].replace(/<\/?[a-z0-1]+>/sg, "").replace(/\n[ ]+/sg, "");
-            }
-
-            self.enqueueNextCall();
-          })
-          .catch(function(error) {
-            self.hasError           = true;
-            self.errorTitle         = "HTTP (C02)";
-            self.errorDescription   = self.formatError(error);
-
-            self.enqueueNextCall();
-          });
-      } else if (contentType.startsWith("application/json") || contentType.startsWith("text/json")) {
-        response.json()
-          .then(function(responseJson) {
-            if ((response.status >= 200) && (response.status < 300)) {
-              if (self.imageUploadQueue.length > 0) {
-                self.enqueueNextItem(self.stepGetImageCsrfToken, "stepGetImageCsrfToken");
-              } else {
-                self.enqueueNextItem(self.stepGetActionCsrfToken, "stepGetActionCsrfToken");
-              }
-
-              self.totalUploadSize    += Number(responseJson["size"]);
-              self.totalDownloadSize  += Number(response.headers.get('Content-Length'));
-              self.totalCreateCounter += Number(responseJson["create_counter"]);
-              self.totalUpdateCounter += Number(responseJson["update_counter"]);
-              self.totalDeleteCounter += Number(responseJson["delete_counter"]);
-            } else {
-              self.hasError           = true;
-              self.errorTitle         = "HTTP (C03)";
-              self.errorDescription   = response.status + ": " + response.statusText;
-            }
-
-            self.enqueueNextCall();
-          })
-          .catch(function(error) {
-            self.hasError           = true;
-            self.errorTitle         = "HTTP (C04)";
-            self.errorDescription   = self.formatError(error);
-
-            self.enqueueNextCall();
-          });
-      } else {
-        self.hasError           = true;
-        self.errorTitle         = "HTTP (C05)";
-        self.errorDescription   = response.status + ": " + response.statusText;
-      }
-    })
-    .catch(function(error) {
-      self.hasError           = true;
-      self.errorTitle         = "HTTP (C06)";
-      self.errorDescription   = self.formatError(error);
-
-      self.enqueueNextCall();
-    });
-  }
-
-  stepUploadAction() {
-    var self = this;
-    var json = {
-      "uuid": assignmentBugWorkaround(self.document.id),
-      "action": "convert"
-    };
-
-    fetch(self.settings.getEndpoint(),
-    {
-      method: "PATCH",
-      body: json,
-      headers: {
-          "Cookie": "csrftoken=" + self.webServiceToken,
-          "Authorization": self.getAuthorizationHeader(),
-          "Content-Type": "application/json+action",
-          "X-CSRFToken": self.webServiceToken
-      }
-    })
-    .then(function(response) {
-      var contentType = response.headers.get("content-type");
-
-      if (contentType.startsWith("text/html")) { 
-        response.text()
-          .then(function(responseText) {
-            var titlePattern   = /<title>(.*)<\/title>/s;
-            var titleMatch     = titlePattern.exec(responseText);
-            var summaryPattern = /<div id="summary">(.*?)<\/div>/s;
-            var summaryMatch   = summaryPattern.exec(responseText);
-
-            self.hasError           = true;
-            self.errorTitle         = "HTTP (D01)";
-            self.errorDescription   = response.status + ": " + response.statusText;
-
-            if (titleMatch != null) {
-              self.errorDescription += "\n" + titleMatch[1];
-            }
-
-            if (summaryMatch != null) {
-              self.errorDescription += "\n" + summaryMatch[1].replace(/<\/?[a-z0-1]+>/sg, "").replace(/\n[ ]+/sg, "");
-            }
-
-            self.enqueueNextCall();
-          })
-          .catch(function(error) {
-            self.hasError           = true;
-            self.errorTitle         = "HTTP (D02)";
-            self.errorDescription   = self.formatError(error);
-
-            self.enqueueNextCall();
-          });
-      } else if (contentType.startsWith("application/json") || contentType.startsWith("text/json")) {
-        response.json()
-          .then(function(responseJson) {
-            if ((response.status >= 200) && (response.status < 300)) {
-              if (self.imageUploadQueue.length > 0) {
-                self.enqueueNextItem(self.stepGetImageCsrfToken, "stepGetImageCsrfToken");
-              } else {
-                self.enqueueNextItem(self.stepReportSuccess, "stepReportSuccess");
-              }
-
-              self.totalUploadSize    += Number(responseJson["size"]);
-              self.totalDownloadSize  += Number(response.headers.get('Content-Length'));
-              self.totalCreateCounter += Number(responseJson["create_counter"]);
-              self.totalUpdateCounter += Number(responseJson["update_counter"]);
-              self.totalDeleteCounter += Number(responseJson["delete_counter"]);
-            } else {
-              self.hasError           = true;
-              self.errorTitle         = "HTTP (D03)";
-              self.errorDescription   = response.status + ": " + response.statusText;
-            }
-
-            self.enqueueNextCall();
-          })
-          .catch(function(error) {
-            self.hasError           = true;
-            self.errorTitle         = "HTTP (D04)";
-            self.errorDescription   = self.formatError(error);
-
-            self.enqueueNextCall();
-          });
-      } else {
-        self.hasError           = true;
-        self.errorTitle         = "HTTP (D05)";
-        self.errorDescription   = response.status + ": " + response.statusText;
-      }
-    })
-    .catch(function(error) {
-      self.hasError           = true;
-      self.errorTitle         = "HTTP (D06)";
-      self.errorDescription   = self.formatError(error);
-
-      self.enqueueNextCall();
-    });
   }
 
   stepReportSuccess() {
     var self = this;
+    var totalTime = Date.now() - self.totalTimeFrom;
+    var clientTime = Math.round((totalTime - this.serverTime) / 1000);
+    var serverTime = Math.round((totalTime - 1000 * clientTime) / 1000);
 
     ui.alert(
       "SUCCESS",
       "Document successfully uploaded.\n" +
-      " * " + this.formatSize(self.totalUploadSize) + " uploaded.\n" +
-      " * " + this.formatSize(self.totalDownloadSize) + " downloaded.\n" +
+      " * " + self.utilFormatSize(self.totalUploadSize) + " uploaded.\n" +
+      " * " + self.utilFormatSize(self.totalDownloadSize) + " downloaded.\n" +
       " * " + self.totalCreateCounter + " objects created.\n" +
       " * " + self.totalUpdateCounter + " objects updated.\n" +
       " * " + self.totalDeleteCounter + " objects deleted.\n" +
-      Math.round((Date.now() - self.totalTimeFrom) / 1000) + " seconds spent.");
+      self.utilFormatTime(clientTime) + " seconds spent on client.\n" +
+      self.utilFormatTime(serverTime) + " seconds spent on server.");
   }
 }
 
@@ -1204,8 +828,6 @@ export default function() {
 
   var stateMachine = new StateMachine(document);
 
-  stateMachine.enqueueNextItem(stateMachine.stepStart, "stepStart");
-  stateMachine.enqueueNextCall();
-  stateMachine.showIsRunning = true;
-  stateMachine.showNextItem();
+  stateMachine.enqueueNextStep("Start");
+  stateMachine.reportCurrentStep();
 }
