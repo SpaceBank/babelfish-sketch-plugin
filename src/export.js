@@ -26,6 +26,9 @@ class StateMachine {
     this.errorTitle       = undefined;
     this.errorDescription = undefined;
 
+    this.tokenID   = null;
+    this.sessionID = null;
+
     this.projects = [];
     this.project = null;
 
@@ -50,6 +53,10 @@ class StateMachine {
     this.callableMap.set("Start",        this.stepStart.bind(this));
     this.callableMap.set("CheckAccount", this.stepCheckAccount.bind(this));
     this.callableMap.set("InputAccount", this.stepInputAccount.bind(this));
+
+    this.callableMap.set("PrepareToken", this.stepPrepareToken.bind(this));
+    this.callableMap.set("Authenticate", this.stepAuthenticate.bind(this));
+
     this.callableMap.set("ListProjects", this.stepListProjects.bind(this));
     this.callableMap.set("CheckProject", this.stepCheckProject.bind(this));
     this.callableMap.set("InputProject", this.stepInputProject.bind(this));
@@ -94,11 +101,38 @@ class StateMachine {
     }
   }
 
-  fetchJsonRpc(methodName, params) {
+  getJsonRpc(suffix) {
     var self = this;
 
     return fetch(
-      self.settings.getEndpoint(),
+      self.settings.getEndpoint() + suffix,
+      {
+        method: "GET",
+        body: {
+          "jsonrpc": "2.0",
+          "method": "session.auth",
+          "id": 0,
+          "params": null
+        }
+      });
+  }
+
+  postJsonRpc(suffix, methodName, params) {
+    var self = this;
+    var headers = {};
+
+    if (self.tokenID) {
+      if (self.sessionID) {
+        headers["Cookie"] = "sessionid=" + self.sessionID + "; csrftoken=" + self.tokenID;
+        headers["X-CSRFToken"] = self.tokenID;
+      } else {
+        headers["Cookie"] = "csrftoken=" + self.tokenID;
+        headers["X-CSRFToken"] = self.tokenID;
+      }
+    }
+
+    return fetch(
+      self.settings.getEndpoint() + suffix,
       {
         method: "POST",
         body: {
@@ -107,9 +141,7 @@ class StateMachine {
           "id": Date.now(),
           "params": params
         },
-        headers: {
-          "Authorization": "Basic " + base64.encodeStr(self.settings.getUsername() + ":" + self.settings.getPassword())
-        }
+        headers: headers
       });
   }
 
@@ -159,51 +191,55 @@ class StateMachine {
     var self = this;
     var now = Date.now();
     var totalElapsed = Math.round((now - this.totalTimeFrom) / 1000);
-    var message = "";
-
-    message += self.utilFormatTime(totalElapsed) + " 🕑";
-    message += " " + self.utilFormatSize(self.totalUploadSize) + " ⇑ " + self.utilFormatSize(self.totalDownloadSize) + " ⇓ |";
+    var message =
+      "🕑 " + self.utilFormatTime(totalElapsed) +
+      ",⇑ " + self.utilFormatSize(self.totalUploadSize) +
+      ",⇓ " + self.utilFormatSize(self.totalDownloadSize);
 
     if (self.currentStep != null) {
       switch (self.currentStep) {
         case "Start":
-          message += " Start.";
+          message += " | Start.";
           break;
         case "CheckAccount":
-          message += " Checking account.";
+          message += " | Checking account.";
           break;
         case "InputAccount":
-          message += " Waiting for account user input.";
+          message += " | Waiting for account user input.";
+          break;
+        case "PrepareToken":
+        case "Authenticate":
+          message += " | Waiting for server.";
           break;
         case "ListProjects":
-          message += " Downloading project list.";
+          message += " | Downloading project list.";
           break;
         case "CheckProject":
-          message += " Checking account.";
+          message += " | Checking account.";
           break;
         case "InputProject":
-          message += " Waiting for account user input.";
+          message += " | Waiting for account user input.";
           break;
         case "LoadDocument":
         case "StatDocument":
-          message += " Waiting for server.";
+          message += " | Waiting for server.";
           break;
         case "EditDocument":
           if (self.layerUploadObject.length > 0) {
-            message += " Uploading data. " + self.layerUploadObject.length + " layers and " + self.imageUploadObject.length + " images left.";
+            message += " | Uploading data. " + self.layerUploadObject.length + " layers and " + self.imageUploadObject.length + " images left.";
           } else {
-            message += " Uploading data. " + self.imageUploadObject.length + " images left.";
+            message += " | Uploading data. " + self.imageUploadObject.length + " images left.";
           }
           break;
         case "SaveDocument":
-          message += " Waiting for server.";
+          message += " | Waiting for server.";
           break;
         case "EnumerateDocumentLayers":
         case "EnumerateChildrenLayers":
-          message += " Enumerating layers. " + self.artboardCounter + " artboards and " + self.layerCounter + " layers found so far.";
+          message += " | Enumerating layers. " + self.artboardCounter + " artboards and " + self.layerCounter + " layers found so far.";
           break;
         case "ReportSuccess":
-          message += " Success.";
+          message += " | Success.";
           break;
         default:
           break;
@@ -276,13 +312,13 @@ class StateMachine {
     if (self.settings.shouldShowSettings("account") || !self.settings.isAccountValid()) {
       self.enqueueNextStep("InputAccount");
     } else {
-      self.enqueueNextStep("ListProjects");
+      self.enqueueNextStep("PrepareToken");
     }
   }
 
   stepInputAccount() {
     var self = this;
-    var settingWindow = settingsWindowFactory.create(self.settings, "account", self.projects);
+    var settingWindow = settingsWindowFactory.create(self.settings, true, false, true, "account", self.projects);
 
     if (settingWindow.run()) {
       self.enqueueNextStep("CheckAccount");
@@ -294,16 +330,11 @@ class StateMachine {
     }
   }
 
-  stepListProjects() {
+  stepPrepareToken() {
     var self = this;
 
-    if (self.projects.length > 0) {
-      self.enqueueNextStep("CheckProject");
-      return;
-    }
-
     self
-      .fetchJsonRpc("project.list", null)
+      .getJsonRpc("core/v1")
       .then(function(response) {
         if (response.status == 200) {
           self.totalDownloadSize += Number(response.headers.get('Content-Length'));
@@ -313,8 +344,8 @@ class StateMachine {
               var result = self.extractJsonRpc(responseJson);
 
               if (result !== null) {
-                self.projects = result;
-                self.enqueueNextStep("CheckProject");
+                self.tokenID = result["token"];
+                self.enqueueNextStep("Authenticate");
               } else {
                 self.enqueueNextStep(null);
               }
@@ -343,6 +374,116 @@ class StateMachine {
       });
   }
 
+  stepAuthenticate() {
+    var self = this;
+    var sessionPattern = /sessionid=([A-Za-z0-9]+)/s;
+
+    self
+      .postJsonRpc("core/v1", "session.auth", [self.settings.getUsername(), self.settings.getPassword()])
+      .then(function(response) {
+        if (response.status == 200) {
+          self.totalDownloadSize += Number(response.headers.get('Content-Length'));
+
+          response.json()
+            .then(function(responseJson) {
+              var result = self.extractJsonRpc(responseJson);
+
+              if (result !== null) {
+                if (result["id"] == undefined) {
+                  self.settings.makeShowSettings("account");
+                  self.enqueueNextStep("InputAccount");
+                } else {
+                  var setCookieHeader = String(response.headers.get('set-cookie'));
+                  var sessionMatch = sessionPattern.exec(setCookieHeader);
+
+                  if (sessionMatch == null) {
+                    self.hasError           = true;
+                    self.errorTitle         = "(E04) INVALID RESPONSE";
+                    self.errorDescription   = response.status + ": Session cookie is missing.";
+                    self.enqueueNextStep(null);
+                  } else {
+                    self.sessionID = sessionMatch[1];
+                  }
+
+                  self.enqueueNextStep("ListProjects");
+                }
+              } else {
+                self.enqueueNextStep(null);
+              }
+            })
+            .catch(function(error) {
+              self.hasError         = true;
+              self.errorTitle       = "(E01) INVALID JSON";
+              self.errorDescription = self.utilFormatError(error);
+              self.enqueueNextStep(null);
+            });
+        } else if (response.status == 403) {
+          self.settings.makeShowSettings("account");
+          self.enqueueNextStep("InputAccount");
+        } else {
+          self.hasError           = true;
+          self.errorTitle         = "(E02) INVALID RESPONSE";
+          self.errorDescription   = response.status + ": " + response.statusText;
+          self.enqueueNextStep(null);
+        }
+      })
+      .catch(function(error) {
+        self.hasError           = true;
+        self.errorTitle         = "(E03) HTTP";
+        self.errorDescription   = self.utilFormatError(error);
+        self.enqueueNextStep(null);
+      });
+  }
+
+  stepListProjects() {
+    var self = this;
+
+    if (self.projects.length > 0) {
+      self.enqueueNextStep("CheckProject");
+      return;
+    }
+
+    self
+      .postJsonRpc("sketch/v1", "project.list", null)
+      .then(function(response) {
+        if (response.status == 200) {
+          self.totalDownloadSize += Number(response.headers.get('Content-Length'));
+
+          response.json()
+            .then(function(responseJson) {
+              var result = self.extractJsonRpc(responseJson);
+
+              if (result !== null) {
+                self.projects = result;
+                self.enqueueNextStep("CheckProject");
+              } else {
+                self.enqueueNextStep(null);
+              }
+            })
+            .catch(function(error) {
+              self.hasError         = true;
+              self.errorTitle       = "(F01) INVALID JSON";
+              self.errorDescription = self.utilFormatError(error);
+              self.enqueueNextStep(null);
+            });
+        } else if (response.status == 403) {
+          self.settings.makeShowSettings("account");
+          self.enqueueNextStep("InputAccount");
+        } else {
+          self.hasError           = true;
+          self.errorTitle         = "(F02) INVALID RESPONSE";
+          self.errorDescription   = response.status + ": " + response.statusText;
+          self.enqueueNextStep(null);
+        }
+      })
+      .catch(function(error) {
+        self.hasError           = true;
+        self.errorTitle         = "(F03) HTTP";
+        self.errorDescription   = self.utilFormatError(error);
+        self.enqueueNextStep(null);
+      });
+  }
+
   stepCheckProject() {
     var self = this;
     var shouldShowSettings = self.settings.shouldShowSettings("project");
@@ -366,15 +507,23 @@ class StateMachine {
 
   stepInputProject() {
     var self = this;
-    var settingWindow = settingsWindowFactory.create(self.settings, "project", self.projects);
 
-    if (settingWindow.run()) {
-      self.enqueueNextStep("CheckProject");
-    } else {
+    if ((self.projects === undefined) || (self.projects === null) || (self.projects.length == 0)) {
       self.hasError         = true;
-      self.errorTitle       = "(F01) USER INPUT";
-      self.errorDescription = "Project is required.";
+      self.errorTitle       = "(H02) SERVER DATA";
+      self.errorDescription = "Projects cannot be found.";
       self.enqueueNextStep(null);
+    } else {
+      var settingWindow = settingsWindowFactory.create(self.settings, false, true, true, "project", self.projects);
+
+      if (settingWindow.run()) {
+        self.enqueueNextStep("CheckProject");
+      } else {
+        self.hasError         = true;
+        self.errorTitle       = "(H01) USER INPUT";
+        self.errorDescription = "Project is required.";
+        self.enqueueNextStep(null);
+      }
     }
   }
 
@@ -383,7 +532,7 @@ class StateMachine {
     var uuid = assignmentBugWorkaround(self.document.id);
 
     self
-      .fetchJsonRpc("document.load", [uuid, self.settings.getProject()])
+      .postJsonRpc("sketch/v1", "document.load", [uuid, self.settings.getProject()])
       .then(function(response) {
         if (response.status == 200) {
           self.totalDownloadSize += Number(response.headers.get('Content-Length'));
@@ -396,20 +545,20 @@ class StateMachine {
             })
             .catch(function(error) {
               self.hasError         = true;
-              self.errorTitle       = "(G01) INVALID JSON";
+              self.errorTitle       = "(I01) INVALID JSON";
               self.errorDescription = self.utilFormatError(error);
               self.enqueueNextStep(null);
             });
         } else {
           self.hasError           = true;
-          self.errorTitle         = "(G02) INVALID RESPONSE";
+          self.errorTitle         = "(I02) INVALID RESPONSE";
           self.errorDescription   = response.status + ": " + response.statusText;
           self.enqueueNextStep(null);
         }
       })
       .catch(function(error) {
         self.hasError           = true;
-        self.errorTitle         = "(G03) HTTP)";
+        self.errorTitle         = "(I03) HTTP)";
         self.errorDescription   = self.utilFormatError(error);
         self.enqueueNextStep(null);
       });
@@ -420,7 +569,7 @@ class StateMachine {
     var uuid = assignmentBugWorkaround(self.document.id);
 
     self
-      .fetchJsonRpc("document.stat", [uuid])
+      .postJsonRpc("sketch/v1", "document.stat", [uuid])
       .then(function(response) {
         if (response.status == 200) {
           self.totalDownloadSize += Number(response.headers.get('Content-Length'));
@@ -434,20 +583,20 @@ class StateMachine {
             })
             .catch(function(error) {
               self.hasError         = true;
-              self.errorTitle       = "(H01) INVALID JSON";
+              self.errorTitle       = "(J01) INVALID JSON";
               self.errorDescription = self.utilFormatError(error);
               self.enqueueNextStep(null);
             });
         } else {
           self.hasError           = true;
-          self.errorTitle         = "(H02) INVALID RESPONSE";
+          self.errorTitle         = "(J02) INVALID RESPONSE";
           self.errorDescription   = response.status + ": " + response.statusText;
           self.enqueueNextStep(null);
         }
       })
       .catch(function(error) {
         self.hasError           = true;
-        self.errorTitle         = "(H03) HTTP";
+        self.errorTitle         = "(J03) HTTP";
         self.errorDescription   = self.utilFormatError(error);
         self.enqueueNextStep(null);
       });
@@ -490,7 +639,7 @@ class StateMachine {
       self.enqueueNextStep("SaveDocument");
     } else {
       self
-        .fetchJsonRpc("document.edit", [uuid, layers, images])
+        .postJsonRpc("sketch/v1", "document.edit", [uuid, layers, images])
         .then(function(response) {
           if (response.status == 200) {
             self.totalDownloadSize += Number(response.headers.get('Content-Length'));
@@ -503,20 +652,20 @@ class StateMachine {
               })
               .catch(function(error) {
                 self.hasError         = true;
-                self.errorTitle       = "(I01) INVALID JSON";
+                self.errorTitle       = "(K01) INVALID JSON";
                 self.errorDescription = self.utilFormatError(error);
                 self.enqueueNextStep(null);
               });
           } else {
             self.hasError           = true;
-            self.errorTitle         = "(I02) INVALID RESPONSE";
+            self.errorTitle         = "(K02) INVALID RESPONSE";
             self.errorDescription   = response.status + ": " + response.statusText;
             self.enqueueNextStep(null);
           }
         })
         .catch(function(error) {
           self.hasError           = true;
-          self.errorTitle         = "(I03) HTTP";
+          self.errorTitle         = "(K03) HTTP";
           self.errorDescription   = self.utilFormatError(error);
           self.enqueueNextStep(null);
         });
@@ -528,7 +677,7 @@ class StateMachine {
     var uuid = assignmentBugWorkaround(self.document.id);
 
     self
-      .fetchJsonRpc("document.save", [uuid])
+      .postJsonRpc("sketch/v1", "document.save", [uuid])
       .then(function(response) {
         if (response.status == 200) {
           self.totalDownloadSize += Number(response.headers.get('Content-Length'));
@@ -545,20 +694,20 @@ class StateMachine {
             })
             .catch(function(error) {
               self.hasError         = true;
-              self.errorTitle       = "(J01) INVALID JSON";
+              self.errorTitle       = "(L01) INVALID JSON";
               self.errorDescription = self.utilFormatError(error);
               self.enqueueNextStep(null);
             });
         } else {
           self.hasError           = true;
-          self.errorTitle         = "(J02) INVALID RESPONSE";
+          self.errorTitle         = "(L02) INVALID RESPONSE";
           self.errorDescription   = response.status + ": " + response.statusText;
           self.enqueueNextStep(null);
         }
       })
       .catch(function(error) {
         self.hasError           = true;
-        self.errorTitle         = "(J03) HTTP";
+        self.errorTitle         = "(L03) HTTP";
         self.errorDescription   = self.utilFormatError(error);
         self.enqueueNextStep(null);
       });
@@ -608,7 +757,7 @@ class StateMachine {
 
   stepEnumerateChildrenLayers() {
     var self = this;
-    var deadline = Date.now() + 100;
+    var deadline = Date.now() + 1000;
 
     while ((self.layerFilterQueue.length > 0) && (Date.now() < deadline)) {
       var currentItem = self.layerFilterQueue.pop();
@@ -616,7 +765,7 @@ class StateMachine {
       var parentLayers = currentItem[1];
       var isFilteredOut = currentLayer.hidden;
 
-      if (!isFilteredOut) {        
+      if (!isFilteredOut) {
         self.project.filters.forEach(function(filter, i) {
           if ((filter.type == '*') || (filter.type == currentLayer.type)) {
             if (filter.name.startsWith('/') && filter.name.endsWith('/')) {
