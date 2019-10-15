@@ -29,15 +29,15 @@ class StateMachine {
     this.projects = [];
     this.project = null;
 
-    this.imageStats                = {};
+    this.imageStats         = {};
 
-    this.artboardCounter           = 0;
-    this.layerCounter              = 0;
-    this.layerFilterQueue          = [];
-    this.layerUploadObject         = [];
-    this.imageCounter              = 0;
-    this.imageFilterQueue          = [];
-    this.imageUploadObject         = [];
+    this.artboardCounter    = 0;
+    this.layerCounter       = 0;
+    this.layerFilterQueue   = [];
+    this.layerUploadObject  = [];
+    this.imageCounter       = 0;
+    this.imageFilterQueue   = [];
+    this.imageUploadObject  = [];
 
     this.totalDownloadSize  = 0;
     this.totalUploadSize    = 0;
@@ -56,7 +56,7 @@ class StateMachine {
 
     this.callableMap.set("LoadDocument", this.stepLoadDocument.bind(this));
     this.callableMap.set("StatDocument", this.stepStatDocument.bind(this));
-    this.callableMap.set("VaryDocument", this.stepVaryDocument.bind(this));
+    this.callableMap.set("EditDocument", this.stepEditDocument.bind(this));
     this.callableMap.set("SaveDocument", this.stepSaveDocument.bind(this));
 
     this.callableMap.set("EnumerateDocumentLayers", this.stepEnumerateDocumentLayers.bind(this));
@@ -184,19 +184,23 @@ class StateMachine {
         case "InputProject":
           message += " Waiting for account user input.";
           break;
-        case "EnumerateDocumentLayers":
-        case "EnumerateChildrenLayers":
-          message += " Enumerating layers. " + self.artboardCounter + " artboards and " + self.layerCounter + " layers found so far.";
-          break;
         case "LoadDocument":
         case "StatDocument":
           message += " Waiting for server.";
           break;
-        case "VaryDocument":
-          message += " Uploading data. " + self.layerUploadObject.length + " layers and " + self.imageUploadObject.length + " images left.";
+        case "EditDocument":
+          if (self.layerUploadObject.length > 0) {
+            message += " Uploading data. " + self.layerUploadObject.length + " layers and " + self.imageUploadObject.length + " images left.";
+          } else {
+            message += " Uploading data. " + self.imageUploadObject.length + " images left.";
+          }
           break;
         case "SaveDocument":
           message += " Waiting for server.";
+          break;
+        case "EnumerateDocumentLayers":
+        case "EnumerateChildrenLayers":
+          message += " Enumerating layers. " + self.artboardCounter + " artboards and " + self.layerCounter + " layers found so far.";
           break;
         case "ReportSuccess":
           message += " Success.";
@@ -221,9 +225,7 @@ class StateMachine {
     if (self.currentStep != null) {
       var stepDuration = (Date.now() - self.stepTimeFrom);
 
-      if ((self.currentStep != "EnumerateLayers") && (self.currentStep != "EnumerateImages")) {
-        console.log("} //"  + self.currentStep + "; " + stepDuration + "ms; " + new Date(Date.now()).toISOString());
-      }
+      console.log("} //"  + self.currentStep + "; " + stepDuration + "ms; " + new Date(Date.now()).toISOString());
 
       if (self.hasError) {
         console.log("ERROR: " + self.errorTitle + "; " + self.errorDescription);
@@ -241,17 +243,16 @@ class StateMachine {
     self.currentStep = self.stepStack.pop();
 
     try {
-      if ((self.currentStep != "EnumerateLayers") && (self.currentStep != "EnumerateImages")) {
-        if (self.currentStep == "ReportSuccess") {
-          self.loopIsRunning = false;
-          console.log(self.currentStep + " { } // " + new Date(Date.now()).toISOString());
-        } else {
-          self.loopIsRunning = true;
-          console.log(self.currentStep + " { // " + new Date(Date.now()).toISOString());
-        }
+      if (self.currentStep == "ReportSuccess") {
+        self.loopIsRunning = false;
+        console.log(self.currentStep + " { } // " + new Date(Date.now()).toISOString());
+      } else {
+        self.loopIsRunning = true;
+        console.log(self.currentStep + " { // " + new Date(Date.now()).toISOString());
       }
 
       var func = self.callableMap.get(self.currentStep);
+
       self.stepTimeFrom = Date.now();
       func();
     } catch (e) {
@@ -428,6 +429,7 @@ class StateMachine {
             .then(function(responseJson) {
               var result = self.extractJsonRpc(responseJson);
 
+              self.imageStats = result['images'];
               self.enqueueNextStep("EnumerateDocumentLayers");
             })
             .catch(function(error) {
@@ -451,7 +453,7 @@ class StateMachine {
       });
   }
 
-  stepVaryDocument() {
+  stepEditDocument() {
     var self = this;
     var uuid = assignmentBugWorkaround(self.document.id);
     var layers = [];
@@ -488,7 +490,7 @@ class StateMachine {
       self.enqueueNextStep("SaveDocument");
     } else {
       self
-        .fetchJsonRpc("document.vary", [uuid, layers, images])
+        .fetchJsonRpc("document.edit", [uuid, layers, images])
         .then(function(response) {
           if (response.status == 200) {
             self.totalDownloadSize += Number(response.headers.get('Content-Length'));
@@ -497,7 +499,7 @@ class StateMachine {
               .then(function(responseJson) {
                 var result = self.extractJsonRpc(responseJson);
 
-                self.enqueueNextStep("VaryDocument");
+                self.enqueueNextStep("EditDocument");
               })
               .catch(function(error) {
                 self.hasError         = true;
@@ -612,13 +614,23 @@ class StateMachine {
       var currentItem = self.layerFilterQueue.pop();
       var currentLayer = currentItem[0];
       var parentLayers = currentItem[1];
-      var isFilteredOut = false;
+      var isFilteredOut = currentLayer.hidden;
 
-      self.project.filters.forEach(function(filter, i) {
-        if ((filter.type == currentLayer.type) && (filter.name == currentLayer.name)) {
-          isFilteredOut = true;
-        }
-      });
+      if (!isFilteredOut) {        
+        self.project.filters.forEach(function(filter, i) {
+          if ((filter.type == '*') || (filter.type == currentLayer.type)) {
+            if (filter.name.startsWith('/') && filter.name.endsWith('/')) {
+              if (RegExp(filter.name.substring(1, filter.name.length - 1), "u").test(currentLayer.name)) {
+                isFilteredOut = true;
+              }
+            } else {
+              if (filter.name == currentLayer.name) {
+                isFilteredOut = true;
+              }
+            }
+          }
+        });
+      }
 
       if (!isFilteredOut) {
         if (
@@ -793,7 +805,7 @@ class StateMachine {
     if (self.layerFilterQueue.length > 0) {
       self.enqueueNextStep("EnumerateChildrenLayers");
     } else {
-      self.enqueueNextStep("VaryDocument");
+      self.enqueueNextStep("EditDocument");
     }
   }
 
