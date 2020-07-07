@@ -9,16 +9,16 @@
     }
   ],
   "menu": {
-    "title": "my-plugin",
+    "title": "Babelfish",
     "items": [
       "my-command-identifier"
     ]
   },
-  "version": "0.1.0",
-  "name": "my-plugin",
-  "identifier": "my-plugin",
+  "version": "0.1.1",
+  "name": "babelfish",
+  "identifier": "babelfish",
   "disableCocoaScriptPreprocessor": true,
-  "appcast": "https://raw.githubusercontent.com//master/.appcast.xml",
+  "appcast": "https://raw.githubusercontent.com/SpaceBank/babelfish-sketch-plugin/master/.appcast.xml",
   "author": "BilousAlexandr",
   "authorEmail": "al.bilous@andersenlab.com"
 }

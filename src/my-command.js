@@ -32,7 +32,7 @@ Swatch.propTypes = Color;
 
 const Document = ({ colors }) => (
   <Artboard
-    name="Hello world"
+    name="Hello world 1.0"
     style={{
       flexDirection: 'row',
       flexWrap: 'wrap',

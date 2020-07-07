@@ -1,6 +1,6 @@
 {
   "compatibleVersion": 3,
-  "bundleVersion": 1,
+  "bundleVersion": 1.0,
   "commands": [
     {
       "name": "my-command",
@@ -9,7 +9,7 @@
     }
   ],
   "menu": {
-    "title": "my-plugin",
+    "title": "Babelfish",
     "items": [
       "my-command-identifier"
     ]

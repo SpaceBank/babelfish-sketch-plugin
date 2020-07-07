@@ -56340,7 +56340,7 @@ Swatch.propTypes = Color;
 var Document = function Document(_ref2) {
   var colors = _ref2.colors;
   return /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_1__["createElement"](react_sketchapp__WEBPACK_IMPORTED_MODULE_3__["Artboard"], {
-    name: "Hello world",
+    name: "Hello world 1.0",
     style: {
       flexDirection: 'row',
       flexWrap: 'wrap',

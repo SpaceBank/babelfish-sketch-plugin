@@ -1,13 +1,18 @@
 {
-  "name": "my-plugin",
-  "version": "0.1.0",
+  "name": "babelfish",
+  "description": "babelfish plugin",
+  "version": "0.1.1",
   "engines": {
     "sketch": ">=3.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SpaceBank/babelfish-sketch-plugin.git"
+  },
   "skpm": {
-    "name": "my-plugin",
+    "name": "babelfish",
     "manifest": "src/manifest.json",
-    "main": "my-plugin.sketchplugin"
+    "main": "babelfish.sketchplugin"
   },
   "scripts": {
     "build": "skpm-build",
