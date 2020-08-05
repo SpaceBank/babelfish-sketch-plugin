@@ -99,7 +99,7 @@ class TabPage {
     passwordLabel.setDrawsBackground(false);
     passwordLabel.setEditable(false);
     passwordLabel.setSelectable(false);
-    
+
     var passwordField = NSSecureTextField.alloc().initWithFrame(
       NSMakeRect(
         this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
@@ -111,7 +111,7 @@ class TabPage {
 
     passwordField.setStringValue(initialValue);
     passwordField.setBezelStyle(1);
-    
+
     this.tabItemView.addSubview(passwordLabel);
     this.tabItemView.addSubview(passwordField);
 
@@ -134,7 +134,7 @@ class TabPage {
     checkboxField.setState(initialValue);
     checkboxField.setBezelStyle(1);
     checkboxField.setTitle(labelText);
-    
+
     this.tabItemView.addSubview(checkboxField);
 
     this.currentY -= (this.fieldHeight + this.spacingH);
@@ -176,7 +176,7 @@ class TabPage {
       radioField.setBezelStyle(1);
       radioField.setTitle(labelTexts[index]);
       radioField.setCOSJSTargetFunction(emptyAction);
-      
+
       box.addSubview(radioField);
 
       result.push(radioField);
@@ -240,7 +240,7 @@ class SettingsWindow {
     return new TabPage(this, labelText);
   }
 
-  constructor(settings, activeTab, projects) {
+  constructor(settings, showAccountTab, showProjectTab, showPreferencesTab, activeTab, projects) {
     this._settings = settings;
     this.endpoint  = this._settings.getEndpoint();
     this.username  = this._settings.getUsername();
@@ -250,8 +250,8 @@ class SettingsWindow {
     this.projects  = projects;
 
     this._possibleEndpoints = [
-      "https://globalization.spacebank.xyz/api/sketch/v1",
-      "https://roman-akopov.code.spacebank.xyz/api/sketch/v1"
+      "https://globalization.spacebank.xyz/api/",
+      "https://roman-akopov.code.spacebank.xyz/api/"
     ];
     this._possibleProjects = [];
 
@@ -268,41 +268,46 @@ class SettingsWindow {
     }
 
     this._createChrome();
-    this._pageAccount = this._createTabPage("Account");
-    this._endpointField = this._pageAccount.createPopupField(
-      "Endpoint:",
-      this.endpoint,
-      this._possibleEndpoints
-    );
-    this._usernameField = this._pageAccount.createTextField(
-      "Username:",
-      this.username
-    );
-    this._passwordField = this._pageAccount.createPasswordField(
-      "Password:",
-      this.password
-    );
 
-    if ((this._possibleProjects !== undefined) && (this._possibleProjects !== null) && (this._possibleProjects.length > 0)) {
+    if (showAccountTab) {
+      this._pageAccount = this._createTabPage("Account");
+      this._endpointField = this._pageAccount.createPopupField(
+        "Endpoint:",
+        this.endpoint,
+        this._possibleEndpoints
+      );
+      this._usernameField = this._pageAccount.createTextField(
+        "Username:",
+        this.username
+      );
+      this._passwordField = this._pageAccount.createPasswordField(
+        "Password:",
+        this.password
+      );
+    }
+
+    if (showProjectTab) {
       this._pageProject = this._createTabPage("Project");
       this._projectField = this._pageProject.createPopupField(
         "Project:",
         projectName,
         this._possibleProjects
-      ); 
+      );
     } else {
       this._pageProject = null;
     }
 
-    this._pagePreferences = this._createTabPage("Preferences");
-    this._syncmodeFields = this._pagePreferences.createRadioFields(
-      [
-        "Never show settings dialog",
-        "Show settings dialog before first synchronization",
-        "Show settings dialog before each synchronization",
-      ],
-      this.syncmode
-    );
+    if (showPreferencesTab) {
+      this._pagePreferences = this._createTabPage("Preferences");
+      this._syncmodeFields = this._pagePreferences.createRadioFields(
+        [
+          "Never show settings dialog",
+          "Show settings dialog before first synchronization",
+          "Show settings dialog before each synchronization",
+        ],
+        this.syncmode
+      );
+    }
 
     if ((activeTab == "account") && (this._pageAccount != null)) {
       this.tabView.selectTabViewItem(this._pageAccount.tabItem);
@@ -322,7 +327,7 @@ class SettingsWindow {
         this.password = this._passwordField.stringValue();
         this._settings.setEndpoint(this.endpoint);
         this._settings.setUsername(this.username);
-        this._settings.setPassword(this.password);   
+        this._settings.setPassword(this.password);
       }
 
       if (this._pageProject != null) {
@@ -350,6 +355,6 @@ class SettingsWindow {
 }
 
 
-export function create(settings, activeTab, projects) {
-  return new SettingsWindow(settings, activeTab, projects);
+export function create(settings, showAccountTab, showProjectTab, showPreferencesTab, activeTab, projects) {
+  return new SettingsWindow(settings, showAccountTab, showProjectTab, showPreferencesTab, activeTab, projects);
 }

@@ -110,7 +110,7 @@ class StateMachine {
         method: "GET",
         body: {
           "jsonrpc": "2.0",
-          "method": "session.auth",
+          "method": "session.init",
           "id": 0,
           "params": null
         }
@@ -193,8 +193,8 @@ class StateMachine {
     var totalElapsed = Math.round((now - this.totalTimeFrom) / 1000);
     var message =
       "🕑 " + self.utilFormatTime(totalElapsed) +
-      ",⇑ " + self.utilFormatSize(self.totalUploadSize) +
-      ",⇓ " + self.utilFormatSize(self.totalDownloadSize);
+      " | ⇑ " + self.utilFormatSize(self.totalUploadSize) +
+      " | ⇓ " + self.utilFormatSize(self.totalDownloadSize);
 
     if (self.currentStep != null) {
       switch (self.currentStep) {
@@ -344,7 +344,7 @@ class StateMachine {
               var result = self.extractJsonRpc(responseJson);
 
               if (result !== null) {
-                self.tokenID = result["token"];
+                self.tokenID = responseJson[".csrf.token"];
                 self.enqueueNextStep("Authenticate");
               } else {
                 self.enqueueNextStep(null);
@@ -379,7 +379,7 @@ class StateMachine {
     var sessionPattern = /sessionid=([A-Za-z0-9]+)/s;
 
     self
-      .postJsonRpc("core/v1", "session.auth", [self.settings.getUsername(), self.settings.getPassword()])
+      .postJsonRpc("core/v1", "session.init", [self.settings.getUsername(), self.settings.getPassword()])
       .then(function(response) {
         if (response.status == 200) {
           self.totalDownloadSize += Number(response.headers.get('Content-Length'));
