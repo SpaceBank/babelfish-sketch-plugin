@@ -325,7 +325,7 @@ class SettingsWindow {
     this.projects  = projects;
 
     this.possibleEndpoints = [
-      "https://globalization.spacebank.xyz/api/sketch/v1",
+      'https://dws.babelfish.default.test.xx.spacebank.xyz/',
       ''
     ];
     this._possibleProjects = [];
