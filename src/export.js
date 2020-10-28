@@ -11,9 +11,13 @@ const ENDPOINTS_LIST = {
 	getToken: 'api/v2/authnz/refresh-token/',
 	createDocument: 'api/v2/snapshots/documents/',
 	uploadScreen: 'api/v2/snapshots/screens/',
+	markDocumentAsCompleted: (documentId) => `api/v2/snapshots/documents/${documentId}/`,
 };
 
 class StateMachine {
+	errorTitle = 'Default Error';
+	errorDescription = 'Smth went wrong';
+
 	constructor (document) {
 		this.totalTimeFrom = Date.now();
 		this.document = document;
@@ -23,8 +27,7 @@ class StateMachine {
 		this.currentStep = null;
 		this.loopIsRunning = false;
 		this.hasError = false;
-		this.errorTitle = undefined;
-		this.errorDescription = undefined;
+
 		this.accessToken = null;
 		this.projects = [];
 		this.project = null;
@@ -38,8 +41,6 @@ class StateMachine {
 		this.imageCounter = 0;
 		this.imageUploadObject = [];
 
-		this.totalDownloadSize = 0;
-		this.totalUploadSize = 0;
 		this.serverTime = 0;
 		this.totalCreateCounter = 0;
 		this.totalUpdateCounter = 0;
@@ -57,6 +58,7 @@ class StateMachine {
 			[this.EXECUTING_STEPS_KEYS.SAVE_SCREENS, this.stepSaveScreens.bind(this)],
 			[this.EXECUTING_STEPS_KEYS.ENUMERATE_DOCUMENT_LAYERS, this.stepEnumerateDocumentLayers.bind(this)],
 			[this.EXECUTING_STEPS_KEYS.ENUMERATE_CHILDREN_LAYERS, this.stepEnumerateChildrenLayers.bind(this)],
+			[this.EXECUTING_STEPS_KEYS.MARK_DOCUMENT_AS_COMPLETED, this.markDocumentAsCompleted.bind(this)],
 			[this.EXECUTING_STEPS_KEYS.REPORT_SUCCESS, this.stepReportSuccess.bind(this)],
 		]);
 	}
@@ -73,9 +75,9 @@ class StateMachine {
 			return error.localizedDescription();
 		} else if (typeof error.nativeException === 'object') {
 			return String(error) + '\n' + String(error.nativeException);
-		} else {
-			return String(error);
 		}
+
+		return String(error);
 	}
 
 	handleRequestError (title, error) {
@@ -118,10 +120,10 @@ class StateMachine {
 		if (!!this.currentStep) {
 			const stepDuration = (Date.now() - this.stepTimeFrom);
 
-			console.log('} //' + this.currentStep + '; ' + stepDuration + 'ms; ' + new Date(Date.now()).toISOString());
+			console.log(`} // ${this.currentStep}; ${stepDuration}ms; ${new Date(Date.now()).toISOString()}`);
 
 			if (this.hasError) {
-				console.log('ERROR: ' + this.errorTitle + '; ' + this.errorDescription);
+				console.log(`ERROR: ${this.errorTitle}; ${this.errorDescription}`);
 				this.hasError = false;
 				ui.alert(this.errorTitle, this.errorDescription);
 			}
@@ -136,22 +138,26 @@ class StateMachine {
 		this.currentStep = this.stepStack.pop();
 
 		try {
-			if (this.currentStep === this.EXECUTING_STEPS_KEYS.REPORT_SUCCESS) {
-				this.loopIsRunning = false;
-				console.log(this.currentStep + ' { } // ' + new Date(Date.now()).toISOString());
-			} else {
-				this.loopIsRunning = true;
-				console.log(this.currentStep + ' { // ' + new Date(Date.now()).toISOString());
-			}
+			this.checkExecutionSteps();
 
 			const func = this.callableMap.get(this.currentStep);
-
 			this.stepTimeFrom = Date.now();
+
 			func();
 		} catch (e) {
 			console.log(e.message);
 			this.handleRequestError('INTERNAL ERROR', e.message);
 			this.loopIsRunning = false;
+		}
+	}
+
+	checkExecutionSteps () {
+		if (this.currentStep === this.EXECUTING_STEPS_KEYS.REPORT_SUCCESS) {
+			this.loopIsRunning = false;
+			console.log(`${this.currentStep} { } // ${new Date(Date.now()).toISOString()}`);
+		} else {
+			this.loopIsRunning = true;
+			console.log(`${this.currentStep} { // ${new Date(Date.now()).toISOString()}`);
 		}
 	}
 
@@ -244,6 +250,7 @@ class StateMachine {
 		const response = await this.postJsonRpc(ENDPOINTS_LIST.createDocument, document);
 		try {
 			const responseJson = await response.json();
+			this.createdDocumentId = responseJson.id;
 			this.pagesList = responseJson.pages;
 			this.enqueueNextStep(EXECUTING_STEPS_KEYS.ENUMERATE_DOCUMENT_LAYERS);
 		} catch (e) {
@@ -268,11 +275,41 @@ class StateMachine {
 			}).flat();
 		}
 
-		screensArray.map(async (item) => {
-			const test = await this.postJsonRpc(ENDPOINTS_LIST.uploadScreen, item);
-		});
 
 		this.enqueueNextStep(null);
+
+		try {
+			const response = await Promise.all(screensArray.filter(screen => !!screen.png_image_data).map(async (item) => {
+				const savedScreen = await this.postJsonRpc(ENDPOINTS_LIST.uploadScreen, item);
+			}));
+
+			this.enqueueNextStep(EXECUTING_STEPS_KEYS.MARK_DOCUMENT_AS_COMPLETED);
+		} catch (e) {
+			this.enqueueNextStep(null);
+			console.log(e);
+		}
+
+	}
+
+	async markDocumentAsCompleted () {
+		try {
+			const test = await fetch(`${this.settings.getEndpoint()}${ENDPOINTS_LIST.markDocumentAsCompleted(this.createdDocumentId)}`,
+				{
+					method: 'PATCH',
+					body: {
+						is_complete: true,
+					},
+					headers: {
+						'Authorization': `Bearer ${this.accessToken}`,
+						'Content-Type': 'application/json',
+						Accept: 'application/json',
+					},
+				});
+			this.enqueueNextStep(null);
+		} catch (e) {
+			console.log(e);
+			this.enqueueNextStep(null);
+		}
 	}
 
 	stepEnumerateDocumentLayers () {
@@ -292,6 +329,53 @@ class StateMachine {
 		this.enqueueNextStep(EXECUTING_STEPS_KEYS.ENUMERATE_CHILDREN_LAYERS);
 	}
 
+	processArtboardLayer (currentLayer, childLayers) {
+		const pngOptions = { formats: 'png', output: false };
+		const pngBuffer = sketch.export(currentLayer, pngOptions);
+
+		this.artboardCounter++;
+		this.imageCounter++;
+
+		return {
+			png_image_data: new Buffer.from(pngBuffer).toString('base64'),
+			page: currentLayer.parent.id,
+			name: currentLayer.name ? currentLayer.name : 'Unnamed artboard',
+			code: currentLayer.id,
+			layers: childLayers,
+		};
+	}
+
+	createDefaultExportedLayer (currentLayer, childLayers, rect) {
+		return {
+			kind: currentLayer.type === this.LAYER_TYPES.TEXT ? 'text' : 'group',
+				code: currentLayer.id,
+			rect_x: Math.round(rect.x),
+			rect_y: Math.round(rect.y),
+			rect_w: Math.round(rect.w),
+			rect_h: Math.round(rect.h),
+			children: childLayers,
+		};
+	}
+
+	calculateAbsCoordinates (currentLayer, temp, rect) {
+		if (!!currentLayer.frame && currentLayer.parent && currentLayer.parent.type !== this.LAYER_TYPES.PAGE
+			&& currentLayer.parent.type !== this.LAYER_TYPES.ARTBOARD) {
+			if (currentLayer.parent && currentLayer.parent.frame) {
+				const tempParent = temp.find(item => item.id === currentLayer.parent.id);
+				if (tempParent) {
+					return {
+						'x': currentLayer.frame.x + tempParent.rect.x,
+						'y': currentLayer.frame.y + tempParent.rect.y,
+						'w': currentLayer.frame.width,
+						'h': currentLayer.frame.height,
+					};
+				}
+			}
+		}
+
+		return rect;
+	}
+
 	stepEnumerateChildrenLayers () {
 		const deadline = Date.now() + 1000;
 		const temp = [];
@@ -302,35 +386,21 @@ class StateMachine {
 			const currentLayer = currentItem[0];
 			const parentLayers = currentItem[1];
 			let isFilteredOut = currentLayer.hidden;
+
 			if (!isFilteredOut) {
 				if (supportedLayerTypes.includes(currentLayer.type)) {
 					this.layerCounter++;
 
-					let rect = null;
-
-					if (!!currentLayer.frame) {
-						rect = {
+					let rect = (!!currentLayer.frame)
+						? {
 							'x': currentLayer.frame.x,
 							'y': currentLayer.frame.y,
 							'w': currentLayer.frame.width,
 							'h': currentLayer.frame.height,
-						};
-					}
-
-					if (!!currentLayer.frame && currentLayer.parent && currentLayer.parent.type !== this.LAYER_TYPES.PAGE
-						&& currentLayer.parent.type !== this.LAYER_TYPES.ARTBOARD) {
-						if (currentLayer.parent && currentLayer.parent.frame) {
-							const tempParent = temp.find(item => item.id === currentLayer.parent.id);
-							if (tempParent) {
-								rect = {
-									'x': currentLayer.frame.x + tempParent.rect.x,
-									'y': currentLayer.frame.y + tempParent.rect.y,
-									'w': currentLayer.frame.width,
-									'h': currentLayer.frame.height,
-								};
-							}
 						}
-					}
+						: null;
+
+					rect = this.calculateAbsCoordinates(currentLayer, temp, rect);
 
 					const childLayers = [];
 
@@ -347,53 +417,25 @@ class StateMachine {
 							y: rect.y,
 						},
 					});
-					let defaultExportedLayer = {
-						kind: currentLayer.type === this.LAYER_TYPES.TEXT ? 'text' : 'group',
-						code: currentLayer.id,
-						rect_x: Math.round(rect.x),
-						rect_y: Math.round(rect.y),
-						rect_w: Math.round(rect.w),
-						rect_h: Math.round(rect.h),
-						children: childLayers,
-					};
-
-					if (currentLayer.type === this.LAYER_TYPES.TEXT && currentLayer.text) {
-						defaultExportedLayer = {
-							...defaultExportedLayer,
-							text: currentLayer.text,
-						};
-					}
-
-					let artboard = null;
-					if (currentLayer.type === this.LAYER_TYPES.ARTBOARD) {
-						const pngOptions = { formats: 'png', output: false };
-						const pngBuffer = sketch.export(currentLayer, pngOptions);
-						this.artboardCounter++;
-						this.imageCounter++;
-
-						artboard = {
-							png_image_data: new Buffer.from(pngBuffer).toString('base64'),
-							page: currentLayer.parent.id,
-							name: currentLayer.name,
-							code: currentLayer.id,
-							layers: childLayers,
-						};
-					}
+					let defaultExportedLayer = this.createDefaultExportedLayer(currentLayer, childLayers, rect);
 
 					let exportedLayer = (currentLayer.type === this.LAYER_TYPES.ARTBOARD)
-						? artboard
-						: defaultExportedLayer;
+						? this.processArtboardLayer(currentLayer, childLayers)
+						: (currentLayer.type === this.LAYER_TYPES.TEXT && currentLayer.text.trim())
+							? {
+								...defaultExportedLayer,
+								text: currentLayer.text,
+							}
+							: defaultExportedLayer;
 
 					parentLayers.push(exportedLayer);
 				}
 			}
 		}
 
-		if (this.layerFilterQueue.length) {
-			this.enqueueNextStep(EXECUTING_STEPS_KEYS.ENUMERATE_CHILDREN_LAYERS);
-		} else {
-			this.enqueueNextStep(EXECUTING_STEPS_KEYS.SAVE_SCREENS);
-		}
+		(this.layerFilterQueue.length)
+			? this.enqueueNextStep(EXECUTING_STEPS_KEYS.ENUMERATE_CHILDREN_LAYERS)
+			: this.enqueueNextStep(EXECUTING_STEPS_KEYS.SAVE_SCREENS);
 	}
 
 	stepReportSuccess () {

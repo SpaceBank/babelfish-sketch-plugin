@@ -7,6 +7,7 @@ export const EXECUTING_STEPS_KEYS = {
 	SAVE_SCREENS: 'SaveScreens',
 	ENUMERATE_DOCUMENT_LAYERS: 'EnumerateDocumentLayers',
 	ENUMERATE_CHILDREN_LAYERS: 'EnumerateChildrenLayers',
+	MARK_DOCUMENT_AS_COMPLETED: 'MarkDocumentAsCompleted',
 	REPORT_SUCCESS: 'ReportSuccess',
 };
 
@@ -18,10 +19,11 @@ export function stepsMessages () {
 		PREPARE_TOKEN: ' | Waiting for server.',
 		UPLOAD_DOCUMENT: ' | Waiting for server.',
 		SAVE_SCREENS: () => (!!this.layerUploadObject.length)
-			? ' | Uploading data. ' + this.layerUploadObject.length + ' layers and ' + this.imageUploadObject.length + ' images left.'
-			: ' | Uploading data. ' + this.imageUploadObject.length + ' images left.',
-		ENUMERATE_DOCUMENT_LAYERS: () => ' | Enumerating layers. ' + this.artboardCounter + ' artboards and ' + this.layerCounter + ' layers found so far.',
-		ENUMERATE_CHILDREN_LAYERS: () => ' | Enumerating layers. ' + this.artboardCounter + ' artboards and ' + this.layerCounter + ' layers found so far.',
+			? ` | Uploading data. ${this.layerUploadObject.length} layers and ${this.imageUploadObject.length} images left.`
+			: ` | Uploading data. ${this.imageUploadObject.length} images left.`,
+		ENUMERATE_DOCUMENT_LAYERS: () => ` | Enumerating layers. ${this.artboardCounter} artboards and ${this.layerCounter} layers found so far.`,
+		ENUMERATE_CHILDREN_LAYERS: () => ` | Enumerating layers. ${this.artboardCounter} artboards and ${this.layerCounter} layers found so far.`,
+		MARK_DOCUMENT_AS_COMPLETED: ' | Marking document as completed',
 		REPORT_SUCCESS: ' | Success.',
 	};
 }
@@ -36,6 +38,7 @@ export function createSteps (message = '') {
 		[EXECUTING_STEPS_KEYS.SAVE_SCREENS, () => message += this.STEPS_MASSAGES.SAVE_SCREENS()],
 		[EXECUTING_STEPS_KEYS.ENUMERATE_DOCUMENT_LAYERS, () => message += this.STEPS_MASSAGES.ENUMERATE_DOCUMENT_LAYERS()],
 		[EXECUTING_STEPS_KEYS.ENUMERATE_CHILDREN_LAYERS, () => message += this.STEPS_MASSAGES.ENUMERATE_CHILDREN_LAYERS()],
+		[EXECUTING_STEPS_KEYS.MARK_DOCUMENT_AS_COMPLETED, () => message += this.STEPS_MASSAGES.MARK_DOCUMENT_AS_COMPLETED],
 		[EXECUTING_STEPS_KEYS.REPORT_SUCCESS, () => message += this.STEPS_MASSAGES.REPORT_SUCCESS],
 	]);
 }
