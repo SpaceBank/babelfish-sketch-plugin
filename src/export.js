@@ -305,7 +305,7 @@ class StateMachine {
 						Accept: 'application/json',
 					},
 				});
-			this.enqueueNextStep(null);
+			this.enqueueNextStep(this.EXECUTING_STEPS_KEYS.REPORT_SUCCESS);
 		} catch (e) {
 			console.log(e);
 			this.enqueueNextStep(null);
@@ -348,7 +348,7 @@ class StateMachine {
 	createDefaultExportedLayer (currentLayer, childLayers, rect) {
 		return {
 			kind: currentLayer.type === this.LAYER_TYPES.TEXT ? 'text' : 'group',
-				code: currentLayer.id,
+			code: currentLayer.id,
 			rect_x: Math.round(rect.x),
 			rect_y: Math.round(rect.y),
 			rect_w: Math.round(rect.w),
@@ -385,11 +385,22 @@ class StateMachine {
 			const currentItem = this.layerFilterQueue.pop();
 			const currentLayer = currentItem[0];
 			const parentLayers = currentItem[1];
+			let text = null;
+
 			let isFilteredOut = currentLayer.hidden;
 
 			if (!isFilteredOut) {
 				if (supportedLayerTypes.includes(currentLayer.type)) {
 					this.layerCounter++;
+					if (currentLayer.type === this.LAYER_TYPES.TEXT && currentLayer.text) {
+						const nsStringArray = currentLayer.sketchObject.attributedString().treeAsDictionary().value.attributes;
+						const formattedTextArray = [];
+						nsStringArray.forEach(textLayer => {
+							formattedTextArray.push(this.processTextFormatting(textLayer));
+						});
+
+						text = formattedTextArray.join('');
+					}
 
 					let rect = (!!currentLayer.frame)
 						? {
@@ -424,7 +435,7 @@ class StateMachine {
 						: (currentLayer.type === this.LAYER_TYPES.TEXT && currentLayer.text.trim())
 							? {
 								...defaultExportedLayer,
-								text: currentLayer.text,
+								text: text,
 							}
 							: defaultExportedLayer;
 
@@ -438,19 +449,41 @@ class StateMachine {
 			: this.enqueueNextStep(EXECUTING_STEPS_KEYS.SAVE_SCREENS);
 	}
 
+	processTextFormatting (nsText) {
+		if (nsText.text === ' ') {
+			return ' ';
+		}
+
+		let formattedText = nsText.text;
+
+		if (nsText.NSStrikethrough) {
+			formattedText = `{-${formattedText}-}`;
+		}
+
+		if (nsText.NSUnderline) {
+			formattedText = `{_${formattedText}_}`;
+		}
+
+		if (nsText.NSFont.name.includes('Bold')) {
+			formattedText = `{*${nsText.text}*}`;
+		}
+
+		if (nsText.NSFont.name.includes('Italic')) {
+			formattedText = `{/${nsText.text}/}`;
+		}
+
+		return formattedText;
+	}
+
 	stepReportSuccess () {
 		const totalTime = Date.now() - this.totalTimeFrom;
 		const clientTime = Math.round((totalTime - this.serverTime) / 1000);
-		const serverTime = Math.round((totalTime - 1000 * clientTime) / 1000);
 
 		ui.alert(
 			'SUCCESS',
 			'Document successfully uploaded.\n' +
-			' * ' + this.totalCreateCounter + ' objects created.\n' +
-			' * ' + this.totalUpdateCounter + ' objects updated.\n' +
-			' * ' + this.totalDeleteCounter + ' objects deleted.\n' +
-			this.utilFormatTime(clientTime) + ' seconds spent on client.\n' +
-			this.utilFormatTime(serverTime) + ' seconds spent on server.');
+			this.utilFormatTime(clientTime) + ' seconds spent on client.\n');
+		this.enqueueNextStep(null);
 	}
 }
 
