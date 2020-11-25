@@ -6,8 +6,8 @@ export const EXECUTING_STEPS_KEYS = {
 	UPLOAD_DOCUMENT: 'UploadDocument',
 	SAVE_SCREENS: 'SaveScreens',
 	ENUMERATE_DOCUMENT_LAYERS: 'EnumerateDocumentLayers',
-	ENUMERATE_CHILDREN_LAYERS: 'EnumerateChildrenLayers',
 	MARK_DOCUMENT_AS_COMPLETED: 'MarkDocumentAsCompleted',
+	SAVE_TRANSITIONS: 'SaveTransitions',
 	REPORT_SUCCESS: 'ReportSuccess',
 };
 
@@ -18,12 +18,10 @@ export function stepsMessages () {
 		INPUT_ACCOUNT: ' | Waiting for account user input.',
 		PREPARE_TOKEN: ' | Waiting for server.',
 		UPLOAD_DOCUMENT: ' | Waiting for server.',
-		SAVE_SCREENS: () => (!!this.layerUploadObject.length)
-			? ` | Uploading data. ${this.layerUploadObject.length} layers and ${this.imageUploadObject.length} images left.`
-			: ` | Uploading data. ${this.imageUploadObject.length} images left.`,
+		SAVE_SCREENS: () => ` | Uploading data`,
 		ENUMERATE_DOCUMENT_LAYERS: () => ` | Enumerating layers. ${this.artboardCounter} artboards and ${this.layerCounter} layers found so far.`,
-		ENUMERATE_CHILDREN_LAYERS: () => ` | Enumerating layers. ${this.artboardCounter} artboards and ${this.layerCounter} layers found so far.`,
 		MARK_DOCUMENT_AS_COMPLETED: ' | Marking document as completed',
+		SAVE_TRANSITIONS: ' | Saving transitions',
 		REPORT_SUCCESS: ' | Success.',
 	};
 }
@@ -37,8 +35,8 @@ export function createSteps (message = '') {
 		[EXECUTING_STEPS_KEYS.UPLOAD_DOCUMENT, () => message += this.STEPS_MASSAGES.UPLOAD_DOCUMENT],
 		[EXECUTING_STEPS_KEYS.SAVE_SCREENS, () => message += this.STEPS_MASSAGES.SAVE_SCREENS()],
 		[EXECUTING_STEPS_KEYS.ENUMERATE_DOCUMENT_LAYERS, () => message += this.STEPS_MASSAGES.ENUMERATE_DOCUMENT_LAYERS()],
-		[EXECUTING_STEPS_KEYS.ENUMERATE_CHILDREN_LAYERS, () => message += this.STEPS_MASSAGES.ENUMERATE_CHILDREN_LAYERS()],
 		[EXECUTING_STEPS_KEYS.MARK_DOCUMENT_AS_COMPLETED, () => message += this.STEPS_MASSAGES.MARK_DOCUMENT_AS_COMPLETED],
+		[EXECUTING_STEPS_KEYS.SAVE_TRANSITIONS, () => message += this.STEPS_MASSAGES.SAVE_TRANSITIONS],
 		[EXECUTING_STEPS_KEYS.REPORT_SUCCESS, () => message += this.STEPS_MASSAGES.REPORT_SUCCESS],
 	]);
 }
