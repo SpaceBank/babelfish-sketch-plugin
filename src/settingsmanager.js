@@ -8,31 +8,11 @@ class SettingsManager {
   constructor(document, sessionID) {
     this._document = document;
     this._sessionID = sessionID;
-    this._endpoint = settings.documentSettingForKey(this._document, "webservice-endpoint");
-    this._username = settings.documentSettingForKey(this._document, "webservice-username");
-    this._password = settings.documentSettingForKey(this._document, "webservice-password");
-    this._project  = settings.documentSettingForKey(this._document, "webservice-project");
-    this._syncmode = settings.documentSettingForKey(this._document, "settingsui-syncmode");
-
-    if (this._endpoint == undefined) {
-      this._endpoint = '';
-    }
-
-    if (this._username == undefined) {
-      this._username = '';
-    }
-
-    if (this._password == undefined) {
-      this._password = '';
-    }
-
-    if (this._project == undefined) {
-      this._project = '';
-    }
-
-    if (this._syncmode == undefined) {
-      this._syncmode = 2;
-    }
+    this._endpoint = settings.documentSettingForKey(this._document, "webservice-endpoint") || '';
+    this._username = settings.documentSettingForKey(this._document, "webservice-username") || '';
+    this._password = settings.documentSettingForKey(this._document, "webservice-password") || '';
+    this._project  = settings.documentSettingForKey(this._document, "webservice-project") || '';
+    this._syncmode = settings.documentSettingForKey(this._document, "settingsui-syncmode") || 2;
   }
 
   getEndpoint() {
@@ -81,16 +61,16 @@ class SettingsManager {
   }
 
   makeShowSettings(page) {
-    var fullName = "show-settings-" + page + "-" + assignmentBugWorkaround(this._document.id);
+    const fullName = "show-settings-" + page + "-" + assignmentBugWorkaround(this._document.id);
 
     settings.setSessionVariable(fullName, -1);
   }
 
   shouldShowSettings(page) {
-    var fullName = "show-settings-" + page + "-" + assignmentBugWorkaround(this._document.id);
-    var oldValue = settings.sessionVariable(fullName);
+    const fullName = "show-settings-" + page + "-" + assignmentBugWorkaround(this._document.id);
+    const oldValue = settings.sessionVariable(fullName);
 
-    if (oldValue == -1) {
+    if (oldValue === -1) {
       settings.setSessionVariable(fullName, this._sessionID);
 
       return true;
@@ -100,7 +80,7 @@ class SettingsManager {
       case 0:
         return false;
       case 1:
-        if (oldValue !== undefined) {
+        if (!!oldValue) {
           settings.setSessionVariable(fullName, this._sessionID);
 
           return true;
@@ -119,18 +99,11 @@ class SettingsManager {
   }
 
   isAccountValid() {
-    var result = (this._endpoint !== undefined) && (this._endpoint !== null) && (this._endpoint !== "") &&
-      (this._username !== undefined) && (this._username !== null) && (this._username !== "") &&
-      (this._password !== undefined) && (this._password !== null) && (this._password !== "");
-
-    return result;
+    return !!this._endpoint && this._username && !!this._password;
   }
 
   isProjectValid() {
-    var result =
-      (this._project !== undefined) && (this._project !== null) && (this._project !== 0);
-
-    return result;
+    return !!this._project;
   }
 }
 

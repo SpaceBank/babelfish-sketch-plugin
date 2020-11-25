@@ -1,16 +1,92 @@
-
 function emptyAction() {}
 
-
 class TabPage {
-  createPopupField(labelText, initialValue, allValues) {
-    var popupLabel = NSTextField.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft,
-        this.currentY - (this.labelHeight + this.marginLabelTop),
-        this.labelWidth,
-        this.labelHeight
-      )
+  createPopupField(labelTexts) {
+    const labelTextNumber = labelTexts.length;
+    const boxOuterHeight = 23 + 2 * this.marginPopupTop + labelTextNumber * (this.fieldHeight + this.spacingH);
+    const box = NSBox.alloc().initWithFrame(
+        NSMakeRect(
+            this.marginLabelLeft,
+            this.currentY - (boxOuterHeight + this.marginPopupTop),
+            this.totalW - (this.marginLabelLeft + this.marginLabelRight) - 6,
+            boxOuterHeight
+        )
+    );
+
+    box.setTitlePosition(0);
+
+    const result = []
+    const boxInnerHeight = box.contentView().frame().size.height;
+    const boxInnerWidth = box.contentView().frame().size.width;
+    const radioField = NSButton.alloc().initWithFrame(
+        NSMakeRect(
+            this.marginLabelLeft,
+            boxInnerHeight - (this.fieldHeight + this.spacingH) + this.marginPopupTop,
+            boxInnerWidth - (this.marginLabelLeft + this.marginLabelRight),
+            this.labelHeight
+        )
+    );
+
+    const radioField1 = NSButton.alloc().initWithFrame(
+        NSMakeRect(
+            this.marginLabelLeft,
+            boxInnerHeight - 23 - (this.fieldHeight + this.spacingH) + this.marginPopupTop,
+            boxInnerWidth - (this.marginLabelLeft + this.marginLabelRight),
+            this.labelHeight
+        )
+    );
+
+    const textField = NSTextField.alloc().initWithFrame(
+        NSMakeRect(
+            this.marginLabelLeft + 20,
+            boxInnerHeight - 23 - (this.fieldHeight + this.spacingH) + this.marginPopupTop,
+            boxInnerWidth - (this.marginLabelLeft + this.marginLabelRight) - 30,
+            this.labelHeight
+        )
+    );
+
+    radioField.setButtonType(4);
+    radioField.setState(1);
+    radioField.setBezelStyle(1);
+    radioField.setTitle(labelTexts[0]);
+
+    radioField1.setButtonType(4);
+    radioField1.setState(0);
+    radioField1.setBezelStyle(1);
+    radioField1.setTitle('');
+
+    let radioTargetFunction = () => {
+      textField.setEditable(!!radioField1.state());
+    };
+
+    radioField.setCOSJSTargetFunction(sender => radioTargetFunction(sender));
+    radioField1.setCOSJSTargetFunction(sender => radioTargetFunction(sender));
+
+    textField.setBezelStyle(1);
+    //textField.setEditable(!!radioField1.state());
+
+    box.addSubview(radioField);
+    box.addSubview(radioField1);
+    box.addSubview(textField);
+
+    result.push(radioField)
+    result.push(radioField1)
+    result.push(textField)
+
+    this.tabItemView.addSubview(box);
+
+    this.currentY -= (boxOuterHeight + this.spacingH);
+    return result;
+  }
+
+  createSelectField(labelText, initialValue, allValues) {
+    const popupLabel = NSTextField.alloc().initWithFrame(
+        NSMakeRect(
+            this.marginLabelLeft,
+            this.currentY - (this.labelHeight + this.marginLabelTop),
+            this.labelWidth,
+            this.labelHeight
+        )
     );
 
     popupLabel.setStringValue(labelText);
@@ -19,25 +95,25 @@ class TabPage {
     popupLabel.setEditable(false);
     popupLabel.setSelectable(false);
 
-    var popupField = NSPopUpButton.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginPopupLeft,
-        this.currentY - (this.fieldHeight + this.marginPopupTop),
-        this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginPopupLeft + this.marginPopupRight),
-        this.labelHeight
-      )
+    const popupField = NSPopUpButton.alloc().initWithFrame(
+        NSMakeRect(
+            this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginPopupLeft,
+            this.currentY - (this.fieldHeight + this.marginPopupTop),
+            this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginPopupLeft + this.marginPopupRight),
+            this.labelHeight
+        )
     );
 
-    var isSelected = false;
+    let isSelected = false;
 
-    for (var index = 0; index < allValues.length; index++) {
-      popupField.addItemWithTitle(allValues[index]);
+    allValues.forEach((item, index) => {
+      popupField.addItemWithTitle(item);
 
-      if (allValues[index] == initialValue) {
+      if (item === initialValue) {
         popupField.selectItemAtIndex(index);
         isSelected = true;
       }
-    }
+    })
 
     if (!isSelected) {
       popupField.selectItemAtIndex(0);
@@ -52,13 +128,13 @@ class TabPage {
   }
 
   createTextField(labelText, initialValue) {
-    var textLabel = NSTextField.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft,
-        this.currentY - (this.labelHeight + this.marginLabelTop),
-        this.labelWidth,
-        this.labelHeight
-      )
+    const textLabel = NSTextField.alloc().initWithFrame(
+        NSMakeRect(
+            this.marginLabelLeft,
+            this.currentY - (this.labelHeight + this.marginLabelTop),
+            this.labelWidth,
+            this.labelHeight
+        )
     );
 
     textLabel.setStringValue(labelText);
@@ -67,13 +143,13 @@ class TabPage {
     textLabel.setEditable(false);
     textLabel.setSelectable(false);
 
-    var textField = NSTextField.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
-        this.currentY - (this.fieldHeight + this.marginTextTop),
-        this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft + this.marginTextRight),
-        this.labelHeight
-      )
+    const textField = NSTextField.alloc().initWithFrame(
+        NSMakeRect(
+            this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
+            this.currentY - (this.fieldHeight + this.marginTextTop),
+            this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft + this.marginTextRight),
+            this.labelHeight
+        )
     );
 
     textField.setStringValue(initialValue);
@@ -81,17 +157,18 @@ class TabPage {
     this.tabItemView.addSubview(textLabel);
     this.tabItemView.addSubview(textField);
     this.currentY -= (this.fieldHeight + this.spacingH);
+
     return textField;
   }
 
   createPasswordField(labelText, initialValue) {
-    var passwordLabel = NSTextField.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft,
-        this.currentY - (this.labelHeight + this.marginLabelTop),
-        this.labelWidth,
-        this.labelHeight
-      )
+    const passwordLabel = NSTextField.alloc().initWithFrame(
+        NSMakeRect(
+            this.marginLabelLeft,
+            this.currentY - (this.labelHeight + this.marginLabelTop),
+            this.labelWidth,
+            this.labelHeight
+        )
     );
 
     passwordLabel.setStringValue(labelText);
@@ -100,13 +177,13 @@ class TabPage {
     passwordLabel.setEditable(false);
     passwordLabel.setSelectable(false);
 
-    var passwordField = NSSecureTextField.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
-        this.currentY - (this.fieldHeight + this.marginPopupTop),
-        this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft + this.marginTextRight),
-        this.labelHeight
-      )
+    const passwordField = NSSecureTextField.alloc().initWithFrame(
+        NSMakeRect(
+            this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
+            this.currentY - (this.fieldHeight + this.marginPopupTop),
+            this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft + this.marginTextRight),
+            this.labelHeight
+        )
     );
 
     passwordField.setStringValue(initialValue);
@@ -121,13 +198,13 @@ class TabPage {
   }
 
   createCheckboxField(labelText, initialValue) {
-    var checkboxField = NSButton.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
-        this.currentY - (this.fieldHeight + this.marginPopupTop),
-        this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft + this.marginTextRight),
-        this.labelHeight
-      )
+    const checkboxField = NSButton.alloc().initWithFrame(
+        NSMakeRect(
+            this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft,
+            this.currentY - (this.fieldHeight + this.marginPopupTop),
+            this.totalW - (this.marginLabelLeft + this.labelWidth + this.marginLabelRight + this.marginTextLeft + this.marginTextRight),
+            this.labelHeight
+        )
     );
 
     checkboxField.setButtonType(3);
@@ -143,44 +220,42 @@ class TabPage {
   }
 
   createRadioFields(labelTexts, initialValue) {
-    var labelTextNumber = labelTexts.length;
-    var boxOuterHeight = 23 + 2 * this.marginPopupTop + labelTextNumber * (this.fieldHeight + this.spacingH);
-    var box = NSBox.alloc().initWithFrame(
-      NSMakeRect(
-        this.marginLabelLeft,
-        this.currentY - (boxOuterHeight + this.marginPopupTop),
-        this.totalW - (this.marginLabelLeft + this.marginLabelRight),
-        boxOuterHeight
-      )
+    const labelTextNumber = labelTexts.length;
+    const boxOuterHeight = 23 + 2 * this.marginPopupTop + labelTextNumber * (this.fieldHeight + this.spacingH);
+    const box = NSBox.alloc().initWithFrame(
+        NSMakeRect(
+            this.marginLabelLeft,
+            this.currentY - (boxOuterHeight + this.marginPopupTop),
+            this.totalW - (this.marginLabelLeft + this.marginLabelRight),
+            boxOuterHeight
+        )
     );
 
     box.setTitlePosition(0);
 
-    var boxInnerHeight = box.contentView().frame().size.height;
-    var boxInnerWidth  = box.contentView().frame().size.width;
+    const boxInnerHeight = box.contentView().frame().size.height;
+    const boxInnerWidth  = box.contentView().frame().size.width;
 
-    var result = [];
-
-    for (var index = 0; index < labelTexts.length; index++) {
-      var radioField = NSButton.alloc().initWithFrame(
-        NSMakeRect(
-          this.marginLabelLeft,
-          boxInnerHeight - ((index + 1) * (this.fieldHeight + this.spacingH) + this.marginPopupTop),
-          boxInnerWidth - (this.marginLabelLeft + this.marginLabelRight),
-          this.labelHeight
-        )
+    const result = labelTexts.map((item, index) => {
+      const radioField = NSButton.alloc().initWithFrame(
+          NSMakeRect(
+              this.marginLabelLeft,
+              boxInnerHeight - ((index + 1) * (this.fieldHeight + this.spacingH) + this.marginPopupTop),
+              boxInnerWidth - (this.marginLabelLeft + this.marginLabelRight),
+              this.labelHeight
+          )
       );
 
       radioField.setButtonType(4);
-      radioField.setState(index == initialValue);
+      radioField.setState(index === initialValue);
       radioField.setBezelStyle(1);
       radioField.setTitle(labelTexts[index]);
       radioField.setCOSJSTargetFunction(emptyAction);
 
       box.addSubview(radioField);
 
-      result.push(radioField);
-    }
+      return radioField;
+    })
 
     this.tabItemView.addSubview(box);
 
@@ -211,7 +286,7 @@ class TabPage {
 
     settingsWindow.tabView.addTabViewItem(this.tabItem);
 
-    if (settingsWindow.tabView.numberOfTabViewItems() == 1) {
+    if (settingsWindow.tabView.numberOfTabViewItems() === 1) {
       settingsWindow.tabW = this.tabItemView.frame().size.width;
       settingsWindow.tabH = this.tabItemView.frame().size.height;
     }
@@ -249,49 +324,47 @@ class SettingsWindow {
     this.projectID = this._settings.getProject();
     this.projects  = projects;
 
-    this._possibleEndpoints = [
-      "https://globalization.spacebank.xyz/api/",
-      "https://roman-akopov.code.spacebank.xyz/api/"
+    this.possibleEndpoints = [
+      'https://dws.babelfish.default.test.xx.spacebank.xyz/',
+      ''
     ];
     this._possibleProjects = [];
 
-    var projectName = null;
+    let projectName = null;
 
-    for (var index = 0; index < this.projects.length; index++) {
-      var project = this.projects[index];
-
-      if (project.id == this.projectID) {
+    this.projects.forEach(project => {
+      if (project.id === this.projectID) {
         projectName = project.name;
       }
 
       this._possibleProjects.push(project.name);
-    }
+    })
 
     this._createChrome();
 
     if (showAccountTab) {
       this._pageAccount = this._createTabPage("Account");
       this._endpointField = this._pageAccount.createPopupField(
-        "Endpoint:",
-        this.endpoint,
-        this._possibleEndpoints
+          this.possibleEndpoints,
+          1,
+          "Endpoint:",
       );
       this._usernameField = this._pageAccount.createTextField(
-        "Username:",
-        this.username
+          "Username:",
+          this.username
       );
       this._passwordField = this._pageAccount.createPasswordField(
-        "Password:",
-        this.password
+          "Password:",
+          this.password
       );
     }
 
     if (showProjectTab) {
       this._pageProject = this._createTabPage("Project");
-      this._projectField = this._pageProject.createPopupField(
-        "Project:",
-        projectName,
-        this._possibleProjects
+      this._projectField = this._pageProject.createSelectField(
+          "Project:",
+          projectName,
+          this._possibleProjects
       );
     } else {
       this._pageProject = null;
@@ -300,29 +373,33 @@ class SettingsWindow {
     if (showPreferencesTab) {
       this._pagePreferences = this._createTabPage("Preferences");
       this._syncmodeFields = this._pagePreferences.createRadioFields(
-        [
-          "Never show settings dialog",
-          "Show settings dialog before first synchronization",
-          "Show settings dialog before each synchronization",
-        ],
-        this.syncmode
+          [
+            "Never show settings dialog",
+            "Show settings dialog before first synchronization",
+            "Show settings dialog before each synchronization",
+          ],
+          this.syncmode
       );
     }
 
-    if ((activeTab == "account") && (this._pageAccount != null)) {
+    if ((activeTab === "account") && !!this._pageAccount) {
+
       this.tabView.selectTabViewItem(this._pageAccount.tabItem);
-    } else if ((activeTab == "project") && (this._pageProject != null)) {
+    } else if ((activeTab === "project") && !!this._pageProject) {
+
       this.tabView.selectTabViewItem(this._pageProject.tabItem);
     }
   }
 
   run() {
-    var window = this.window;
-    var result = window.runModal();
+    const window = this.window;
+    const result = window.runModal();
 
-    if (result == 1000) {
-      if (this._pageAccount != null) {
-        this.endpoint = this._possibleEndpoints[this._endpointField.indexOfSelectedItem()];
+    if (result === 1000) {
+      if (!!this._pageAccount) {
+        this.endpoint = this._endpointField[0].state()
+            ? this.possibleEndpoints[0]
+            : this._endpointField[2].stringValue()
         this.username = this._usernameField.stringValue();
         this.password = this._passwordField.stringValue();
         this._settings.setEndpoint(this.endpoint);
@@ -330,19 +407,19 @@ class SettingsWindow {
         this._settings.setPassword(this.password);
       }
 
-      if (this._pageProject != null) {
+      if (!!this._pageProject) {
         this.projectID = this.projects[this._projectField.indexOfSelectedItem()].id;
         this._settings.setProject(this.projectID);
       }
 
-      if (this._pagePreferences != null) {
+      if (!!this._pagePreferences) {
         this.syncmode = 2;
 
-        for (var index = 0; index < this._syncmodeFields.length; index++) {
-          if (this._syncmodeFields[index].state() == 1) {
+        this._syncmodeFields.forEach((item, index) => {
+          if (item.state() === 1) {
             this.syncmode = index;
           }
-        }
+        })
 
         this._settings.setSyncmode(this.syncmode);
       }
