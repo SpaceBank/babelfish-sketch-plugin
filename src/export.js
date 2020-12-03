@@ -9,6 +9,7 @@ const settingsManagerFactory = require('./settingsmanager.js');
 const settingsWindowFactory = require('./settingswindow.js');
 const ENDPOINTS_LIST = {
 	getToken: 'api/v2/authnz/refresh-token/',
+	createAccessTokenByRefresh: 'api/v2/authnz/access-token/',
 	createDocument: 'api/v2/snapshots/documents/',
 	uploadScreen: 'api/v2/snapshots/screens/',
 	markDocumentAsCompleted: (documentId) => `api/v2/snapshots/documents/${documentId}/`,
@@ -30,8 +31,10 @@ class StateMachine {
 		this.hasError = false;
 
 		this.accessToken = null;
+		this.refreshToken = null;
 		this.projects = [];
 		this.project = null;
+		this.tokenExpirationDate = null;
 
 		this.pagesList = [];
 		this.artboardList = [];
@@ -202,8 +205,31 @@ class StateMachine {
 		}
 	}
 
+	async checkToken () {
+		try {
+			const updatingTokenDate = +(new Date()) + 1000;
+			if ((Number(updatingTokenDate) + 10 * 1000) >= this.tokenExpirationDate * 1000) {
+				const updatedToken = await fetch(`${this.settings.getEndpoint()}${ENDPOINTS_LIST.createAccessTokenByRefresh}`, {
+					method: 'POST',
+					body: {
+						refresh: this.refreshToken,
+					},
+					headers: {
+						'Content-Type': 'application/json',
+					},
+				});
+				const parsedToken = await updatedToken.json();
+				const { access } = parsedToken;
+				this.accessToken = access;
+			}
+		} catch (e) {
+			console.log(e);
+		}
+	}
+
 	async postJsonRpc (endpoint, params) {
 		try {
+			this.checkToken();
 			return await fetch(
 				`${this.settings.getEndpoint()}${endpoint}`,
 				{
@@ -225,8 +251,16 @@ class StateMachine {
 		const token = await this.getToken(ENDPOINTS_LIST.getToken);
 		try {
 			const responseJson = await token.json();
-			const { access } = responseJson;
+			const { access, refresh } = responseJson;
 			this.accessToken = access;
+			this.refreshToken = refresh;
+
+			const tokenParts = access.split('.');
+			const buff = new Buffer.from(tokenParts[1], 'base64').toString('ascii');
+			const tokenInfo = JSON.parse(buff);
+
+			this.tokenExpirationDate = tokenInfo.exp;
+
 			this.enqueueNextStep(EXECUTING_STEPS_KEYS.UPLOAD_DOCUMENT);
 		} catch (e) {
 			this.handleRequestError('(D01) INVALID JSON', e);
@@ -262,8 +296,9 @@ class StateMachine {
 	}
 
 	async stepSaveScreens () {
+		this.checkToken();
 		try {
-			const artboards = []
+			const artboards = [];
 			this.layerUploadObject = this.layerUploadObject.filter(screen => !!screen.png_image_data);
 			for await (let screen of this.layerUploadObject) {
 				const response = await this.postJsonRpc(ENDPOINTS_LIST.uploadScreen, screen);
@@ -334,7 +369,6 @@ class StateMachine {
 		});
 
 		this.layerUploadObject = documentLayers;
-
 		this.enqueueNextStep(EXECUTING_STEPS_KEYS.SAVE_SCREENS);
 	}
 
@@ -511,6 +545,10 @@ class StateMachine {
 			name: currentLayer.name ? currentLayer.name : 'Unnamed artboard',
 			code: currentLayer.id,
 			layers: childLayers,
+			rect_x: Math.round(currentLayer.frame.x),
+			rect_y: Math.round(currentLayer.frame.y),
+			rect_w: Math.round(currentLayer.frame.width),
+			rect_h: Math.round(currentLayer.frame.height),
 		};
 	}
 
