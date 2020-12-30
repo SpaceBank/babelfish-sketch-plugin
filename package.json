@@ -5,7 +5,7 @@
   "engines": {
     "sketch": ">=49.0"
   },
-  "repository": "https://github.com/SpaceBank/GlobalizationSystemSketchPlugIn",
+  "repository": "https://github.com/SpaceBank/babelfish-sketch-plugin",
   "skpm": {
     "name": "space-globalization",
     "manifest": "src/manifest.json",
